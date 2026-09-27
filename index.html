@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -25,6 +24,7 @@
           <a href="#agenda">Agenda</a>
           <a href="#no-olvides">No olvides</a>
           <a href="#fotos">Fotos</a>
+          <a href="#videos">Videos</a>
           <a href="#musica">Música</a>
           <a href="#recuerdos">Recuerdos</a>
         </div>
@@ -74,25 +74,9 @@
             <input id="event-date" type="date" required />
           </div>
 
-          <div class="input-group">
-            <label for="event-time">Hora</label>
-            <input id="event-time" type="time" required />
-          </div>
-
           <div class="input-group full">
             <label for="event-detail">Detalle</label>
             <textarea id="event-detail" rows="3" placeholder="Describe la actividad..." required></textarea>
-          </div>
-
-          <div class="input-group">
-            <label for="event-alarm">Alarma</label>
-            <select id="event-alarm" class="select-input">
-              <option value="0">Sin alarma</option>
-              <option value="5">5 minutos antes</option>
-              <option value="15">15 minutos antes</option>
-              <option value="30">30 minutos antes</option>
-              <option value="60">1 hora antes</option>
-            </select>
           </div>
 
           <button type="submit" class="primary-btn full-btn">Guardar actividad</button>
@@ -147,6 +131,21 @@
         </div>
 
         <div id="photo-gallery" class="photo-gallery" aria-live="polite"></div>
+      </section>
+
+      <!-- SECCIÓN VIDEOS -->
+      <section id="videos" class="section gallery-section">
+        <div class="section-header">
+          <p class="eyebrow small">Videoteca</p>
+          <h2>🎥 Videos del viaje</h2>
+        </div>
+
+        <div class="upload-box">
+          <label for="video-input" class="upload-btn">Subir videos</label>
+          <input id="video-input" type="file" accept="video/*" multiple />
+        </div>
+
+        <div id="video-gallery" class="video-gallery" aria-live="polite"></div>
       </section>
 
       <!-- SECCIÓN MÚSICA -->
@@ -259,88 +258,7 @@
         }
       }
 
-      // EVENT LISTENERS PARA AGENDA
-      const eventForm = document.getElementById('event-form');
-      eventForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const title = document.getElementById('event-title').value;
-        const date = document.getElementById('event-date').value;
-        const time = document.getElementById('event-time').value;
-        const detail = document.getElementById('event-detail').value;
-        const alarm = parseInt(document.getElementById('event-alarm').value);
-
-        const event = {
-          id: Date.now(),
-          title,
-          date,
-          time,
-          detail,
-          alarm,
-          completed: false
-        };
-
-        const events = JSON.parse(localStorage.getItem('events')) || [];
-        events.push(event);
-        localStorage.setItem('events', JSON.stringify(events));
-
-        const eventDateTime = `${date}T${time}`;
-        setAlarm(event.id, title, eventDateTime, alarm);
-
-        renderEvents();
-        eventForm.reset();
-        requestNotificationPermission();
-      });
-
-      function renderEvents() {
-        const events = JSON.parse(localStorage.getItem('events')) || [];
-        const eventList = document.getElementById('event-list');
-        eventList.innerHTML = '';
-
-        events.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`)).forEach(event => {
-          const eventCard = document.createElement('div');
-          eventCard.className = `event-card ${event.completed ? 'completed' : ''}`;
-          const eventDateTime = new Date(`${event.date}T${event.time}`);
-          const timeUntil = eventDateTime.getTime() - new Date().getTime();
-          const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
-          const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
-
-          let timeStatus = '';
-          if (timeUntil < 0) {
-            timeStatus = '✅ Evento pasado';
-          } else if (hoursUntil === 0 && minutesUntil < 60) {
-            timeStatus = `⚡ ¡En ${minutesUntil} minutos!`;
-          } else if (hoursUntil < 24) {
-            timeStatus = `📍 En ${hoursUntil}h ${minutesUntil}m`;
-          }
-
-          eventCard.innerHTML = `
-            <div class="event-header">
-              <span class="date">${event.date} • ${event.time}</span>
-              ${event.alarm > 0 ? `<span class="alarm-badge">⏰ ${event.alarm}min</span>` : ''}
-            </div>
-            <h3>${event.title}</h3>
-            <p>${event.detail}</p>
-            ${timeStatus ? `<div class="time-status">${timeStatus}</div>` : ''}
-            <div class="event-actions">
-              <button class="btn-small" onclick="deleteEvent(${event.id})">🗑️ Eliminar</button>
-            </div>
-          `;
-          eventList.appendChild(eventCard);
-        });
-      }
-
-      function deleteEvent(eventId) {
-        const events = JSON.parse(localStorage.getItem('events')) || [];
-        const updatedEvents = events.filter(e => e.id !== eventId);
-        localStorage.setItem('events', JSON.stringify(updatedEvents));
-        if (alarms.has(eventId)) {
-          clearTimeout(alarms.get(eventId));
-          alarms.delete(eventId);
-        }
-        renderEvents();
-      }
-
-      // EVENT LISTENERS PARA NO OLVIDES
+      // EVENT LISTENERS PARA RECORDATORIOS
       const reminderForm = document.getElementById('reminder-form');
       reminderForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -460,7 +378,6 @@
       }
 
       // INICIALIZAR
-      renderEvents();
       renderReminders();
       requestNotificationPermission();
     </script>
