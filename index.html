@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Punta Cana 2026 • Con ellas</title>
+    <meta
+      name="description"
+      content="Página para compartir actividades, fotos y recuerdos del viaje de amigas a Punta Cana 2026."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="topbar">
+        <div class="brand">Punta Cana 2026</div>
+        <div class="nav-links">
+          <a href="#agenda">Agenda</a>
+          <a href="#fotos">Fotos</a>
+          <a href="#recuerdos">Recuerdos</a>
+        </div>
+      </nav>
+
+      <div class="hero-content">
+        <div class="hero-text">
+          <p class="eyebrow">Con ellas • Al sol</p>
+          <h1>Un viaje lleno de sol, risas y recuerdos para siempre.</h1>
+          <p class="subtitle">
+            Aquí compartimos nuestras actividades, los mejores momentos y todas las fotos de este sueño bajo el mar y el cielo de Punta Cana.
+          </p>
+          <div class="hero-actions">
+            <a href="#agenda" class="primary-btn">Ver agenda</a>
+            <a href="#fotos" class="secondary-btn">Ver fotos</a>
+          </div>
+        </div>
+
+        <div class="hero-card">
+          <div class="mini-badge">Viaje de amigas</div>
+          <h3>Con ellas</h3>
+          <ul>
+            <li>🌊 Playa y mar</li>
+            <li>🍹 Momentos inolvidables</li>
+            <li>📸 Fotos de todas</li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="agenda" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Agenda</p>
+          <h2>Actividades del viaje</h2>
+        </div>
+
+        <form id="event-form" class="event-form">
+          <div class="input-group">
+            <label for="event-title">Título</label>
+            <input id="event-title" type="text" placeholder="Ej: Brunch en la playa" required />
+          </div>
+
+          <div class="input-group">
+            <label for="event-date">Fecha</label>
+            <input id="event-date" type="date" required />
+          </div>
+
+          <div class="input-group full">
+            <label for="event-detail">Detalle</label>
+            <textarea id="event-detail" rows="3" placeholder="Describe la actividad..." required></textarea>
+          </div>
+
+          <button type="submit" class="primary-btn">Guardar actividad</button>
+        </form>
+
+        <div id="event-list" class="event-list" aria-live="polite"></div>
+      </section>
+
+      <section id="fotos" class="section gallery-section">
+        <div class="section-header">
+          <p class="eyebrow small">Galería</p>
+          <h2>Fotos del recuerdo</h2>
+        </div>
+
+        <div class="upload-box">
+          <label for="photo-input" class="upload-btn">Subir fotos</label>
+          <input id="photo-input" type="file" accept="image/*" multiple />
+        </div>
+
+        <div id="photo-gallery" class="photo-gallery" aria-live="polite"></div>
+      </section>
+
+      <section id="recuerdos" class="section memories-section">
+        <div class="section-header">
+          <p class="eyebrow small">Recuerdos</p>
+          <h2>Frases y momentos que nos quedan</h2>
+        </div>
+
+        <div class="memory-cards">
+          <article>
+            <span>“La mejor compañía es la que te hace reír hasta el alma.”</span>
+          </article>
+          <article>
+            <span>“Cada foto, cada risa y cada momento se queda para siempre.”</span>
+          </article>
+          <article>
+            <span>“Llegamos con ganas de vivir, y nos fuimos con recuerdos de mar y amistad.”</span>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Hecho con amor para Punta Cana 2026 • Con ellas ✨</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
