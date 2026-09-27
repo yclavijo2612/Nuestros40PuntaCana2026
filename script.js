@@ -1,25 +1,6 @@
 const STORAGE_KEYS = {
-  events: 'nuestros40-events',
   photos: 'nuestros40-photos'
 };
-
-const sampleEvents = [
-  {
-    title: 'Brunch en la playa',
-    date: '2026-02-18',
-    detail: 'Primera mañana de sol y buena vibra, con jugos, fotos y risas desde el amanecer.'
-  },
-  {
-    title: 'Cena con música en vivo',
-    date: '2026-02-19',
-    detail: 'Noche especial para celebrar a las 40 con cocktail, baile y momentos inolvidables.'
-  },
-  {
-    title: 'Excursión al mar',
-    date: '2026-02-20',
-    detail: 'Marea alta, fotos de grupo y el mejor momento para relajarnos entre olas y risas.'
-  }
-];
 
 const samplePhotos = [
   'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80',
@@ -28,113 +9,124 @@ const samplePhotos = [
   'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80'
 ];
 
-const eventForm = document.querySelector('#event-form');
-const eventList = document.querySelector('#event-list');
 const photoInput = document.querySelector('#photo-input');
 const photoGallery = document.querySelector('#photo-gallery');
 
 function readFromStorage(key, fallback) {
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(raw); } catch { return fallback; }
 }
 
 function saveToStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function formatDate(dateString) {
-  const date = new Date(dateString + 'T12:00:00');
-  return new Intl.DateTimeFormat('es-ES', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  }).format(date);
-}
-
-function renderEvents() {
-  const events = readFromStorage(STORAGE_KEYS.events, sampleEvents);
-
-  eventList.innerHTML = events
-    .map(
-      (event) => `
-        <article class="event-card">
-          <span class="date">${formatDate(event.date)}</span>
-          <h3>${event.title}</h3>
-          <p>${event.detail}</p>
-        </article>
-      `
-    )
-    .join('');
-}
-
 function renderPhotos() {
   const photos = readFromStorage(STORAGE_KEYS.photos, samplePhotos);
-
-  photoGallery.innerHTML = photos
-    .map(
-      (src) => `
-        <figure class="photo-card">
-          <img src="${src}" alt="Foto del viaje" />
-        </figure>
-      `
-    )
-    .join('');
-}
-
-function handleEventSubmit(event) {
-  event.preventDefault();
-
-  const title = document.querySelector('#event-title').value.trim();
-  const date = document.querySelector('#event-date').value;
-  const detail = document.querySelector('#event-detail').value.trim();
-
-  if (!title || !date || !detail) return;
-
-  const currentEvents = readFromStorage(STORAGE_KEYS.events, sampleEvents);
-  const updatedEvents = [{ title, date, detail }, ...currentEvents];
-
-  saveToStorage(STORAGE_KEYS.events, updatedEvents);
-  eventForm.reset();
-  renderEvents();
+  photoGallery.innerHTML = photos.map((src) => `
+    <figure class="photo-card">
+      <img src="${src}" alt="Foto del viaje" />
+    </figure>
+  `).join('');
 }
 
 function readFilesAsDataUrls(files) {
-  return Promise.all(
-    Array.from(files).map(
-      (file) =>
-        new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        })
-    )
-  );
+  return Promise.all(Array.from(files).map((file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  })));
 }
 
 async function handlePhotoUpload(event) {
   const files = event.target.files;
   if (!files || files.length === 0) return;
-
   const dataUrls = await readFilesAsDataUrls(files);
   const currentPhotos = readFromStorage(STORAGE_KEYS.photos, samplePhotos);
-  const updatedPhotos = [...dataUrls, ...currentPhotos];
-
-  saveToStorage(STORAGE_KEYS.photos, updatedPhotos);
+  saveToStorage(STORAGE_KEYS.photos, [...dataUrls, ...currentPhotos]);
   photoInput.value = '';
   renderPhotos();
 }
 
+// Añade botones Editar a las actividades y recordatorios creados por index.html.
+function addEditButtons() {
+  document.querySelectorAll('#event-list .event-card').forEach((card) => {
+    if (card.querySelector('.btn-edit')) return;
+    const deleteButton = card.querySelector('[onclick^="deleteEvent("]');
+    if (!deleteButton) return;
+    const match = deleteButton.getAttribute('onclick').match(/deleteEvent\((\d+)\)/);
+    if (!match) return;
+    const button = document.createElement('button');
+    button.className = 'btn-small btn-edit';
+    button.textContent = '✏️ Editar';
+    button.type = 'button';
+    button.addEventListener('click', () => editEvent(Number(match[1])));
+    card.querySelector('.event-actions')?.prepend(button);
+  });
+
+  document.querySelectorAll('#reminder-list .reminder-item').forEach((item) => {
+    if (item.querySelector('.btn-edit')) return;
+    const deleteButton = item.querySelector('[onclick^="deleteReminder("]');
+    if (!deleteButton) return;
+    const match = deleteButton.getAttribute('onclick').match(/deleteReminder\((\d+)\)/);
+    if (!match) return;
+    const button = document.createElement('button');
+    button.className = 'btn-delete btn-edit';
+    button.textContent = '✏️';
+    button.type = 'button';
+    button.title = 'Editar';
+    button.addEventListener('click', () => editReminder(Number(match[1])));
+    item.querySelector('.reminder-content')?.append(button);
+  });
+}
+
+function editEvent(eventId) {
+  const events = JSON.parse(localStorage.getItem('events')) || [];
+  const event = events.find((item) => item.id === eventId);
+  if (!event) return;
+
+  const title = prompt('Título de la actividad:', event.title);
+  if (title === null) return;
+  const date = prompt('Fecha (AAAA-MM-DD):', event.date);
+  if (date === null) return;
+  const time = prompt('Hora (HH:MM):', event.time || '12:00');
+  if (time === null) return;
+  const detail = prompt('Detalle:', event.detail);
+  if (detail === null) return;
+  const alarm = prompt('Alarma en minutos (0, 5, 15, 30 o 60):', event.alarm ?? 0);
+  if (alarm === null) return;
+
+  Object.assign(event, {
+    title: title.trim() || event.title,
+    date,
+    time,
+    detail: detail.trim() || event.detail,
+    alarm: Number(alarm) || 0
+  });
+  localStorage.setItem('events', JSON.stringify(events));
+  window.renderEvents?.();
+  alert('Actividad actualizada ✅');
+}
+
+function editReminder(reminderId) {
+  const reminders = JSON.parse(localStorage.getItem('reminders')) || [];
+  const reminder = reminders.find((item) => item.id === reminderId);
+  if (!reminder) return;
+  const text = prompt('Editar lo que no deben olvidar:', reminder.text);
+  if (text === null || !text.trim()) return;
+  reminder.text = text.trim();
+  localStorage.setItem('reminders', JSON.stringify(reminders));
+  window.renderReminders?.();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-  renderEvents();
   renderPhotos();
+  addEditButtons();
+  const observer = new MutationObserver(addEditButtons);
+  observer.observe(document.querySelector('#event-list'), { childList: true, subtree: true });
+  observer.observe(document.querySelector('#reminder-list'), { childList: true, subtree: true });
 });
 
-eventForm.addEventListener('submit', handleEventSubmit);
-photoInput.addEventListener('change', handlePhotoUpload);
+photoInput?.addEventListener('change', handlePhotoUpload);
