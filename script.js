@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   events: 'nuestros40-events',
-  photos: 'nuestros40-photos'
+  photos: 'nuestros40-photos',
+  videos: 'nuestros40-videos'
 };
 
 const sampleEvents = [
@@ -35,6 +36,8 @@ const eventForm = document.querySelector('#event-form');
 const eventList = document.querySelector('#event-list');
 const photoInput = document.querySelector('#photo-input');
 const photoGallery = document.querySelector('#photo-gallery');
+const videoInput = document.querySelector('#video-input');
+const videoGallery = document.querySelector('#video-gallery');
 
 function readFromStorage(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -107,9 +110,43 @@ function deleteEvent(id) {
 
 function renderPhotos() {
   const photos = readFromStorage(STORAGE_KEYS.photos, samplePhotos);
-  photoGallery.innerHTML = photos.map((src) => `
-    <figure class="photo-card"><img src="${src}" alt="Foto del viaje" /></figure>
+  photoGallery.innerHTML = photos.map((src, index) => `
+    <figure class="photo-card photo-item" data-photo-index="${index}">
+      <img src="${src}" alt="Foto del viaje" />
+      <button type="button" class="btn-delete-photo" data-delete-photo="${index}" title="Borrar foto">✕</button>
+    </figure>
   `).join('');
+}
+
+function deletePhoto(index) {
+  if (!confirm('¿Quieres borrar esta foto?')) return;
+  const photos = readFromStorage(STORAGE_KEYS.photos, samplePhotos);
+  photos.splice(index, 1);
+  saveToStorage(STORAGE_KEYS.photos, photos);
+  renderPhotos();
+}
+
+function renderVideos() {
+  const videos = readFromStorage(STORAGE_KEYS.videos, []);
+  videoGallery.innerHTML = videos.map((src, index) => `
+    <figure class="video-card video-item" data-video-index="${index}">
+      <video controls style="width: 100%; height: 100%; object-fit: cover;"></video>
+      <button type="button" class="btn-delete-video" data-delete-video="${index}" title="Borrar video">✕</button>
+    </figure>
+  `).join('');
+  
+  videos.forEach((src, index) => {
+    const videoElement = videoGallery.querySelector(`[data-video-index="${index}"] video`);
+    if (videoElement) videoElement.src = src;
+  });
+}
+
+function deleteVideo(index) {
+  if (!confirm('¿Quieres borrar este video?')) return;
+  const videos = readFromStorage(STORAGE_KEYS.videos, []);
+  videos.splice(index, 1);
+  saveToStorage(STORAGE_KEYS.videos, videos);
+  renderVideos();
 }
 
 function readFilesAsDataUrls(files) {
@@ -131,6 +168,16 @@ async function handlePhotoUpload(event) {
   renderPhotos();
 }
 
+async function handleVideoUpload(event) {
+  const files = event.target.files;
+  if (!files?.length) return;
+  const dataUrls = await readFilesAsDataUrls(files);
+  const currentVideos = readFromStorage(STORAGE_KEYS.videos, []);
+  saveToStorage(STORAGE_KEYS.videos, [...dataUrls, ...currentVideos]);
+  videoInput.value = '';
+  renderVideos();
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -144,9 +191,22 @@ eventList?.addEventListener('click', (event) => {
   if (deleteButton) deleteEvent(deleteButton.dataset.deleteEvent);
 });
 
+photoGallery?.addEventListener('click', (event) => {
+  const deleteButton = event.target.closest('[data-delete-photo]');
+  if (deleteButton) deletePhoto(Number(deleteButton.dataset.deletePhoto));
+});
+
+videoGallery?.addEventListener('click', (event) => {
+  const deleteButton = event.target.closest('[data-delete-video]');
+  if (deleteButton) deleteVideo(Number(deleteButton.dataset.deleteVideo));
+});
+
 eventForm?.addEventListener('submit', handleEventSubmit);
 photoInput?.addEventListener('change', handlePhotoUpload);
+videoInput?.addEventListener('change', handleVideoUpload);
+
 window.addEventListener('DOMContentLoaded', () => {
   renderEvents();
   renderPhotos();
+  renderVideos();
 });
