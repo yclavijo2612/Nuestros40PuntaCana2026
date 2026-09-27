@@ -23,6 +23,7 @@
         <div class="brand">Punta Cana 2026</div>
         <div class="nav-links">
           <a href="#agenda">Agenda</a>
+          <a href="#no-olvides">No olvides</a>
           <a href="#fotos">Fotos</a>
           <a href="#musica">Música</a>
           <a href="#recuerdos">Recuerdos</a>
@@ -55,10 +56,11 @@
     </header>
 
     <main>
+      <!-- SECCIÓN AGENDA CON ALARMAS -->
       <section id="agenda" class="section">
         <div class="section-header">
           <p class="eyebrow small">Agenda</p>
-          <h2>Actividades del viaje</h2>
+          <h2>⏰ Actividades del viaje</h2>
         </div>
 
         <form id="event-form" class="event-form">
@@ -72,21 +74,71 @@
             <input id="event-date" type="date" required />
           </div>
 
+          <div class="input-group">
+            <label for="event-time">Hora</label>
+            <input id="event-time" type="time" required />
+          </div>
+
           <div class="input-group full">
             <label for="event-detail">Detalle</label>
             <textarea id="event-detail" rows="3" placeholder="Describe la actividad..." required></textarea>
           </div>
 
-          <button type="submit" class="primary-btn">Guardar actividad</button>
+          <div class="input-group">
+            <label for="event-alarm">Alarma</label>
+            <select id="event-alarm" class="select-input">
+              <option value="0">Sin alarma</option>
+              <option value="5">5 minutos antes</option>
+              <option value="15">15 minutos antes</option>
+              <option value="30">30 minutos antes</option>
+              <option value="60">1 hora antes</option>
+            </select>
+          </div>
+
+          <button type="submit" class="primary-btn full-btn">Guardar actividad</button>
         </form>
 
         <div id="event-list" class="event-list" aria-live="polite"></div>
       </section>
 
+      <!-- SECCIÓN NO OLVIDES -->
+      <section id="no-olvides" class="section no-olvides-section">
+        <div class="section-header">
+          <p class="eyebrow small">Importante</p>
+          <h2>📝 Cosas que no podemos olvidar</h2>
+          <p class="section-subtitle">Todos anotamos aquí lo importante para el viaje</p>
+        </div>
+
+        <form id="reminder-form" class="reminder-form">
+          <div class="input-group-reminder">
+            <input 
+              id="reminder-input" 
+              type="text" 
+              placeholder="Ej: Llevar pasaporte, protector solar..." 
+              required 
+            />
+            <select id="reminder-category" class="select-input">
+              <option value="📋">📋 General</option>
+              <option value="🎒">🎒 Maleta</option>
+              <option value="💊">💊 Medicinas</option>
+              <option value="🛂">🛂 Documentos</option>
+              <option value="💰">💰 Dinero</option>
+              <option value="📱">📱 Tecnología</option>
+              <option value="🏖️">🏖️ Playa</option>
+              <option value="🎉">🎉 Fiestas</option>
+            </select>
+            <button type="submit" class="btn-add-reminder">Agregar</button>
+          </div>
+        </form>
+
+        <div id="reminder-list" class="reminder-list" aria-live="polite"></div>
+      </section>
+
+      <!-- SECCIÓN FOTOS -->
       <section id="fotos" class="section gallery-section">
         <div class="section-header">
           <p class="eyebrow small">Galería</p>
-          <h2>Fotos del recuerdo</h2>
+          <h2>📸 Fotos del recuerdo</h2>
         </div>
 
         <div class="upload-box">
@@ -97,7 +149,7 @@
         <div id="photo-gallery" class="photo-gallery" aria-live="polite"></div>
       </section>
 
-      <!-- NUEVA SECCIÓN: MÚSICA, TIKTOK Y UBICACIÓN -->
+      <!-- SECCIÓN MÚSICA -->
       <section id="musica" class="section musica-interactiva">
         <div class="musica-header">
           <span class="tag">Punta Cana</span>
@@ -128,10 +180,11 @@
         </div>
       </section>
 
+      <!-- SECCIÓN RECUERDOS -->
       <section id="recuerdos" class="section memories-section">
         <div class="section-header">
           <p class="eyebrow small">Recuerdos</p>
-          <h2>Frases y momentos que nos quedan</h2>
+          <h2>✨ Frases y momentos que nos quedan</h2>
         </div>
 
         <div class="memory-cards">
@@ -154,6 +207,229 @@
 
     <script src="script.js"></script>
     <script>
+      // SISTEMA DE ALARMAS Y NOTIFICACIONES
+      const alarms = new Map();
+      const reminders = JSON.parse(localStorage.getItem('reminders')) || [];
+
+      function requestNotificationPermission() {
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      }
+
+      function playAlarmSound() {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+      }
+
+      function sendNotification(title, message) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body: message,
+            icon: '🌴',
+            tag: 'punta-cana-reminder'
+          });
+        }
+        playAlarmSound();
+      }
+
+      function setAlarm(eventId, eventTitle, eventDateTime, minutesBefore) {
+        if (minutesBefore === 0) return;
+
+        const now = new Date();
+        const eventTime = new Date(eventDateTime);
+        const alarmTime = new Date(eventTime.getTime() - minutesBefore * 60000);
+        const timeUntilAlarm = alarmTime.getTime() - now.getTime();
+
+        if (timeUntilAlarm > 0) {
+          const timeoutId = setTimeout(() => {
+            sendNotification('⏰ Recordatorio de Punta Cana', `¡${eventTitle} en ${minutesBefore} minutos!`);
+          }, timeUntilAlarm);
+
+          alarms.set(eventId, timeoutId);
+        }
+      }
+
+      // EVENT LISTENERS PARA AGENDA
+      const eventForm = document.getElementById('event-form');
+      eventForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const title = document.getElementById('event-title').value;
+        const date = document.getElementById('event-date').value;
+        const time = document.getElementById('event-time').value;
+        const detail = document.getElementById('event-detail').value;
+        const alarm = parseInt(document.getElementById('event-alarm').value);
+
+        const event = {
+          id: Date.now(),
+          title,
+          date,
+          time,
+          detail,
+          alarm,
+          completed: false
+        };
+
+        const events = JSON.parse(localStorage.getItem('events')) || [];
+        events.push(event);
+        localStorage.setItem('events', JSON.stringify(events));
+
+        const eventDateTime = `${date}T${time}`;
+        setAlarm(event.id, title, eventDateTime, alarm);
+
+        renderEvents();
+        eventForm.reset();
+        requestNotificationPermission();
+      });
+
+      function renderEvents() {
+        const events = JSON.parse(localStorage.getItem('events')) || [];
+        const eventList = document.getElementById('event-list');
+        eventList.innerHTML = '';
+
+        events.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`)).forEach(event => {
+          const eventCard = document.createElement('div');
+          eventCard.className = `event-card ${event.completed ? 'completed' : ''}`;
+          const eventDateTime = new Date(`${event.date}T${event.time}`);
+          const timeUntil = eventDateTime.getTime() - new Date().getTime();
+          const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+          const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+
+          let timeStatus = '';
+          if (timeUntil < 0) {
+            timeStatus = '✅ Evento pasado';
+          } else if (hoursUntil === 0 && minutesUntil < 60) {
+            timeStatus = `⚡ ¡En ${minutesUntil} minutos!`;
+          } else if (hoursUntil < 24) {
+            timeStatus = `📍 En ${hoursUntil}h ${minutesUntil}m`;
+          }
+
+          eventCard.innerHTML = `
+            <div class="event-header">
+              <span class="date">${event.date} • ${event.time}</span>
+              ${event.alarm > 0 ? `<span class="alarm-badge">⏰ ${event.alarm}min</span>` : ''}
+            </div>
+            <h3>${event.title}</h3>
+            <p>${event.detail}</p>
+            ${timeStatus ? `<div class="time-status">${timeStatus}</div>` : ''}
+            <div class="event-actions">
+              <button class="btn-small" onclick="deleteEvent(${event.id})">🗑️ Eliminar</button>
+            </div>
+          `;
+          eventList.appendChild(eventCard);
+        });
+      }
+
+      function deleteEvent(eventId) {
+        const events = JSON.parse(localStorage.getItem('events')) || [];
+        const updatedEvents = events.filter(e => e.id !== eventId);
+        localStorage.setItem('events', JSON.stringify(updatedEvents));
+        if (alarms.has(eventId)) {
+          clearTimeout(alarms.get(eventId));
+          alarms.delete(eventId);
+        }
+        renderEvents();
+      }
+
+      // EVENT LISTENERS PARA NO OLVIDES
+      const reminderForm = document.getElementById('reminder-form');
+      reminderForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const text = document.getElementById('reminder-input').value;
+        const category = document.getElementById('reminder-category').value;
+
+        const reminder = {
+          id: Date.now(),
+          text,
+          category,
+          completed: false,
+          addedBy: 'Amiga ' + Math.floor(Math.random() * 100)
+        };
+
+        reminders.push(reminder);
+        localStorage.setItem('reminders', JSON.stringify(reminders));
+
+        renderReminders();
+        reminderForm.reset();
+      });
+
+      function renderReminders() {
+        const reminderList = document.getElementById('reminder-list');
+        reminderList.innerHTML = '';
+
+        const completedReminders = reminders.filter(r => r.completed);
+        const pendingReminders = reminders.filter(r => !r.completed);
+
+        pendingReminders.forEach(reminder => {
+          const reminderItem = document.createElement('div');
+          reminderItem.className = 'reminder-item';
+          reminderItem.innerHTML = `
+            <div class="reminder-content">
+              <input type="checkbox" ${reminder.completed ? 'checked' : ''} onchange="toggleReminder(${reminder.id})">
+              <div class="reminder-text">
+                <span class="category-badge">${reminder.category}</span>
+                <span class="text">${reminder.text}</span>
+                <small>Agregado por: ${reminder.addedBy}</small>
+              </div>
+            </div>
+            <button class="btn-delete" onclick="deleteReminder(${reminder.id})">✕</button>
+          `;
+          reminderList.appendChild(reminderItem);
+        });
+
+        if (completedReminders.length > 0) {
+          const completedSection = document.createElement('div');
+          completedSection.className = 'completed-section';
+          completedSection.innerHTML = '<h4>✅ Completadas</h4>';
+
+          completedReminders.forEach(reminder => {
+            const reminderItem = document.createElement('div');
+            reminderItem.className = 'reminder-item completed';
+            reminderItem.innerHTML = `
+              <div class="reminder-content">
+                <input type="checkbox" checked onchange="toggleReminder(${reminder.id})">
+                <div class="reminder-text">
+                  <span class="category-badge">${reminder.category}</span>
+                  <span class="text">${reminder.text}</span>
+                </div>
+              </div>
+              <button class="btn-delete" onclick="deleteReminder(${reminder.id})">✕</button>
+            `;
+            completedSection.appendChild(reminderItem);
+          });
+
+          reminderList.appendChild(completedSection);
+        }
+      }
+
+      function toggleReminder(reminderId) {
+        const reminder = reminders.find(r => r.id === reminderId);
+        if (reminder) {
+          reminder.completed = !reminder.completed;
+          localStorage.setItem('reminders', JSON.stringify(reminders));
+          renderReminders();
+        }
+      }
+
+      function deleteReminder(reminderId) {
+        const index = reminders.findIndex(r => r.id === reminderId);
+        if (index > -1) {
+          reminders.splice(index, 1);
+          localStorage.setItem('reminders', JSON.stringify(reminders));
+          renderReminders();
+        }
+      }
+
+      // COMPARTIR UBICACIÓN
       function compartirUbicacion() {
         if (!navigator.geolocation) {
           alert("Tu navegador no soporta geolocalización.");
@@ -164,12 +440,11 @@
           function(position) {
             const lat = position.coords.latitude;
             const lon = position.coords.longitude;
-
             const mensaje = `Estoy en Punta Cana 🌴 📍 Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
 
             if (navigator.share) {
               navigator.share({
-                title: "Mi ubicación",
+                title: "Mi ubicación en Punta Cana",
                 text: mensaje
               }).catch(() => {
                 window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank");
@@ -183,6 +458,11 @@
           }
         );
       }
+
+      // INICIALIZAR
+      renderEvents();
+      renderReminders();
+      requestNotificationPermission();
     </script>
   </body>
 </html>
