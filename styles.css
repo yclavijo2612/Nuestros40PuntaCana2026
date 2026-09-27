@@ -321,6 +321,128 @@ textarea {
   object-fit: cover;
 }
 
+/* ESTILOS PARA LA SECCIÓN DE MÚSICA */
+.musica-interactiva {
+  position: relative;
+  max-width: 1100px;
+  margin: 50px auto;
+  padding: 34px 28px 28px;
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(7, 28, 42, 0.93), rgba(14, 72, 90, 0.9)),
+    url("https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat;
+  color: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.musica-interactiva::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(88, 194, 255, 0.25), transparent 40%);
+  pointer-events: none;
+}
+
+.musica-header,
+.playlist-box,
+.acciones-grid {
+  position: relative;
+  z-index: 1;
+}
+
+.musica-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #dfefff;
+  margin-bottom: 12px;
+}
+
+.musica-header h2 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.1;
+  color: #ffffff;
+  font-weight: 800;
+  font-family: "Playfair Display", serif;
+}
+
+.musica-header p {
+  margin: 10px auto 0;
+  max-width: 620px;
+  color: rgba(255,255,255,0.8);
+  font-size: 1rem;
+}
+
+.playlist-box {
+  max-width: 900px;
+  margin: 0 auto;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 14px 30px rgba(0,0,0,0.18);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.playlist-box iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 18px;
+}
+
+.acciones-grid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.btn {
+  appearance: none;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 22px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 12px 25px rgba(0,0,0,0.18);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.98;
+}
+
+.btn-tiktok {
+  background: #000000;
+  color: #ffffff;
+}
+
+.btn-ubicacion {
+  background: linear-gradient(135deg, #1a73e8, #3c8dff);
+  color: #fff;
+}
+
 .memory-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -368,5 +490,18 @@ textarea {
 @media (max-width: 720px) {
   .event-form {
     grid-template-columns: 1fr;
+  }
+
+  .musica-interactiva {
+    padding: 24px 18px 20px;
+    border-radius: 22px;
+  }
+
+  .acciones-grid {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
   }
 }
