@@ -8,15 +8,16 @@ const STORAGE_KEYS = {
   wifi: 'nuestros40-wifi',
   quotes: 'nuestros40-quotes',
   playlist: 'nuestros40-playlists',
-  tiktok: 'nuestros40-tiktok'
+  tiktok: 'nuestros40-tiktok',
+  locations: 'nuestros40-locations'
 };
 
 const defaultEvents = [
-  { id: 'sample-1', title: 'Brunch en la playa', date: '2026-11-07', time: '10:00', location: 'Playa Bávaro', detail: 'Primera mañana de sol y buena vibra, con jugos, fotos y risas desde el amanecer.', alarm: true },
-  { id: 'sample-2', title: 'Cena con música en vivo', date: '2026-11-09', time: '20:00', location: 'Punta Cana Village', detail: 'Noche especial para celebrar a las 40 con cocktail, baile y momentos inolvidables.', alarm: true },
-  { id: 'sample-3', title: 'Riu Palace: relax + piscina', date: '2026-11-10', time: '12:00', location: 'Riu Palace Punta Cana', detail: 'Día de piscina, relax, fotos y descanso total.', alarm: true },
-  { id: 'sample-4', title: 'Riu Palace: fiesta de noche', date: '2026-11-11', time: '21:30', location: 'Riu Palace Punta Cana', detail: 'Fiesta, música y celebraciones de las 40 con todas.', alarm: true },
-  { id: 'sample-5', title: 'Riu Palace: brunch + mar', date: '2026-11-13', time: '09:30', location: 'Riu Palace Punta Cana', detail: 'Un día perfecto para descansar, tomar sol y compartir risas.', alarm: true }
+  { id: 'sample-1', title: 'Brunch en la playa', date: '2026-11-07', time: '10:00', location: 'Playa Bávaro', detail: 'Primera mañana de sol y buena vibra, con jugos, fotos y risas desde el amanecer.' },
+  { id: 'sample-2', title: 'Cena con música en vivo', date: '2026-11-09', time: '20:00', location: 'Punta Cana Village', detail: 'Noche especial para celebrar a las 40 con cocktail, baile y momentos inolvidables.' },
+  { id: 'sample-3', title: 'Riu Palace: relax + piscina', date: '2026-11-10', time: '12:00', location: 'Riu Palace Punta Cana', detail: 'Día de piscina, relax, fotos y descanso total.' },
+  { id: 'sample-4', title: 'Riu Palace: fiesta de noche', date: '2026-11-11', time: '21:30', location: 'Riu Palace Punta Cana', detail: 'Fiesta, música y celebraciones de las 40 con todas.' },
+  { id: 'sample-5', title: 'Riu Palace: brunch + mar', date: '2026-11-13', time: '09:30', location: 'Riu Palace Punta Cana', detail: 'Un día perfecto para descansar, tomar sol y compartir risas.' }
 ];
 
 const defaultEssentials = [
@@ -51,10 +52,10 @@ const defaultWifi = [
 ];
 
 const defaultPlaylists = [
-  { title: 'Punta Cana Summer Vibes', url: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=7a1d7890f7b844a9', emoji: '☀️' },
-  { title: 'Beach Party 2026', url: 'https://open.spotify.com/playlist/37i9dQZF1DXaXB8fQg7xif?si=40d0ad2f89d6451d', emoji: '🏖️' },
-  { title: 'Party Mix Latina', url: 'https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd?si=709db1489e691488', emoji: '🎉' },
-  { title: 'Caribbean Chill', url: 'https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO?si=23d1fce730d64e76', emoji: '🌴' }
+  { title: 'Reggaeton + Playa', url: 'https://open.spotify.com/search/reggaeton%20playlist', emoji: '🔥' },
+  { title: 'Salsa del Caribe', url: 'https://open.spotify.com/search/salsa%20caribe%20playlist', emoji: '💃' },
+  { title: 'Latina Mix', url: 'https://open.spotify.com/search/latina%20playlist', emoji: '🎶' },
+  { title: 'Vibra Tropical', url: 'https://open.spotify.com/search/tropical%20party%20playlist', emoji: '🌴' }
 ];
 
 const defaultTikTok = [
@@ -65,6 +66,7 @@ const defaultTikTok = [
 ];
 
 const alarmTimers = new Map();
+const locationMap = null;
 
 function read(key, fallback) {
   const raw = localStorage.getItem(key);
@@ -315,6 +317,172 @@ function renderTikTok() {
   `).join('');
 }
 
+function getSupabaseClient() {
+  const config = window.NUESTROS40_CONFIG || {};
+  const url = config.supabaseUrl || '';
+  const key = config.supabaseKey || '';
+
+  if (!url || !key || url.includes('tu-proyecto') || key.includes('tu-anon-key')) {
+    return null;
+  }
+
+  if (!window.supabase || !window.supabase.createClient) {
+    return null;
+  }
+
+  return window.supabase.createClient(url, key);
+}
+
+function getLocationsFromStorage() {
+  return read(STORAGE_KEYS.locations, []);
+}
+
+function setLocationsInStorage(locations) {
+  save(STORAGE_KEYS.locations, locations);
+}
+
+function renderMapMarkers(locations) {
+  const mapEl = document.querySelector('#location-map');
+  if (!mapEl) return;
+
+  if (!window.L) {
+    mapEl.innerHTML = '<p class="map-empty">Mapa no disponible.</p>';
+    return;
+  }
+
+  if (!window.__LOCATION_MAP__) {
+    window.__LOCATION_MAP__ = L.map('location-map').setView([18.5601, -68.3725], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(window.__LOCATION_MAP__);
+  }
+
+  const map = window.__LOCATION_MAP__;
+  map.eachLayer((layer) => {
+    if (layer instanceof L.Marker) {
+      map.removeLayer(layer);
+    }
+  });
+
+  if (!locations.length) {
+    map.setView([18.5601, -68.3725], 11);
+    mapEl.dataset.empty = 'true';
+    return;
+  }
+
+  mapEl.dataset.empty = 'false';
+  const bounds = [];
+
+  locations.forEach((person) => {
+    const marker = L.marker([person.latitude, person.longitude]).addTo(map);
+    marker.bindPopup(`<strong>${esc(person.name)}</strong><br>${new Date(person.updated_at || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
+    bounds.push([person.latitude, person.longitude]);
+  });
+
+  map.fitBounds(bounds, { padding: [20, 20] });
+}
+
+function syncLocationsFromRemote() {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    renderMapMarkers(getLocationsFromStorage());
+    return;
+  }
+
+  supabase
+    .from('group_locations')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .then(({ data, error }) => {
+      if (error) {
+        console.error(error);
+        renderMapMarkers(getLocationsFromStorage());
+        return;
+      }
+
+      const locations = (data || []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        updated_at: row.updated_at
+      }));
+
+      setLocationsInStorage(locations);
+      renderMapMarkers(locations);
+    });
+}
+
+function saveLocationForCurrentUser(name, latitude, longitude) {
+  const payload = {
+    name,
+    latitude,
+    longitude,
+    updated_at: new Date().toISOString()
+  };
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase.from('group_locations').upsert(payload, { onConflict: 'name' }).then(({ error }) => {
+      if (error) {
+        console.error(error);
+        const stored = getLocationsFromStorage();
+        const filtered = stored.filter((person) => person.name.toLowerCase() !== name.toLowerCase());
+        filtered.push(payload);
+        setLocationsInStorage(filtered);
+        renderMapMarkers(filtered);
+        return;
+      }
+      syncLocationsFromRemote();
+    });
+    return;
+  }
+
+  const stored = getLocationsFromStorage();
+  const filtered = stored.filter((person) => person.name.toLowerCase() !== name.toLowerCase());
+  filtered.push(payload);
+  setLocationsInStorage(filtered);
+  renderMapMarkers(filtered);
+}
+
+function handleLocationSubmit(event) {
+  event.preventDefault();
+
+  const nameInput = document.querySelector('#location-name');
+  const statusBox = document.querySelector('#location-status');
+  if (!nameInput || !statusBox) return;
+
+  const name = nameInput.value.trim();
+  if (!name) {
+    alert('Escribe tu nombre para compartir tu ubicación');
+    return;
+  }
+
+  statusBox.textContent = 'Compartiendo tu ubicación...';
+
+  if (!navigator.geolocation) {
+    statusBox.textContent = 'Tu navegador no permite geolocalización.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const { latitude, longitude } = position.coords;
+      saveLocationForCurrentUser(name, latitude, longitude);
+      statusBox.textContent = `✅ Ubicación compartida de ${name}`;
+      nameInput.value = '';
+    },
+    () => {
+      statusBox.textContent = 'No se pudo acceder a tu ubicación. Asegúrate de permitir permisos.';
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
 function initEvents() {
   const eventForm = document.querySelector('#event-form');
   if (eventForm) {
@@ -521,11 +689,17 @@ function initEvents() {
   if (enableAlertsBtn) {
     enableAlertsBtn.addEventListener('click', enableAlerts);
   }
+
+  const locationForm = document.querySelector('#location-form');
+  if (locationForm) {
+    locationForm.addEventListener('submit', handleLocationSubmit);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   requestNotificationPermission();
   initEvents();
+
   renderEvents();
   renderPhotos();
   renderVideos();
@@ -536,4 +710,5 @@ document.addEventListener('DOMContentLoaded', () => {
   renderQuotes();
   renderPlaylists();
   renderTikTok();
+  syncLocationsFromRemote();
 });
