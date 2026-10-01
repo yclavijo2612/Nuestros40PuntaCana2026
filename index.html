@@ -1,7 +1,294 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Punta Cana 2026 • Con ellas</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"></head><body><header class="hero"><nav class="topbar"><b class="brand">Punta Cana 2026</b><div class="nav-links"><a href="#agenda">Agenda</a><a href="#fotos">Fotos</a><a href="#outfits">Outfits</a><a href="#vuelos">Vuelos</a><a href="#diario">Diario</a></div></nav><div class="hero-content"><div><p class="eyebrow">Con ellas • Al sol</p><h1>Un viaje lleno de sol, risas y recuerdos para siempre.</h1><p class="subtitle">Compartimos actividades, fotos, vuelos y las historias de esta hermosa aventura.</p><a class="primary-btn" href="#agenda">Ver agenda</a></div><div class="hero-card"><h3>Viaje de amigas</h3><p>🌊 Playa · 🍹 Risas · 📸 Recuerdos</p></div></div></header><main>
-<section id="agenda" class="section"><div class="section-header"><p class="eyebrow small">Agenda</p><h2>⏰ Actividades del viaje</h2><p>Recibirás una alarma automática 30 minutos antes. Permite las notificaciones del navegador.</p></div><form id="event-form" class="event-form"><div class="input-group"><label for="event-title">Actividad</label><input id="event-title" required placeholder="Ej: Brunch en la playa"></div><div class="input-group"><label for="event-date">Fecha</label><input id="event-date" type="date" required></div><div class="input-group"><label for="event-time">Hora</label><input id="event-time" type="time" required></div><div class="input-group"><label for="event-location">Lugar / ubicación</label><input id="event-location" required placeholder="Ej: Playa Bávaro"></div><div class="input-group full"><label for="event-detail">Detalle</label><textarea id="event-detail" required placeholder="Describe la actividad..."></textarea></div><button class="primary-btn full-btn">Guardar actividad</button></form><div id="event-list" class="event-list"></div></section>
-<section id="fotos" class="section gallery-section"><div class="section-header"><p class="eyebrow small">Galería</p><h2>📸 Fotos de todas</h2><p>Cada amiga puede subir sus fotos y escribir su nombre.</p></div><label for="photo-input" class="upload-btn">Subir fotos</label><input id="photo-input" type="file" accept="image/*" multiple><div id="photo-gallery" class="photo-gallery"></div></section>
-<section id="videos" class="section gallery-section"><div class="section-header"><h2>🎥 Videos del viaje</h2></div><label for="video-input" class="upload-btn">Subir videos</label><input id="video-input" type="file" accept="video/*" multiple><div id="video-gallery" class="video-gallery"></div></section>
-<section id="outfits" class="section"><div class="section-header"><p class="eyebrow small">Inspiración</p><h2>👗 Sugerencias de outfits</h2><p>Ideas de Pinterest para playa, cenas y noches especiales.</p></div><div class="outfit-grid"><a target="_blank" rel="noopener" href="https://www.pinterest.com/search/pins/?q=punta%20cana%20beach%20outfit">🏖️ Outfit de playa</a><a target="_blank" rel="noopener" href="https://www.pinterest.com/search/pins/?q=tropical%20dinner%20outfit">🍽️ Cena tropical</a><a target="_blank" rel="noopener" href="https://www.pinterest.com/search/pins/?q=white%20party%20outfit">🤍 Noche blanca</a><a target="_blank" rel="noopener" href="https://www.pinterest.com/search/pins/?q=resort%20vacation%20outfit">🌴 Resort casual</a></div></section>
-<section id="vuelos" class="section no-olvides-section"><div class="section-header"><p class="eyebrow small">Llegadas</p><h2>✈️ Nuestros vuelos</h2><p>Registra cada vuelo para consultar fácilmente quién llega y cuándo.</p></div><form id="flight-form" class="event-form"><div class="input-group"><label for="flight-airline">Aerolínea</label><input id="flight-airline" required placeholder="Ej: Arajet"></div><div class="input-group"><label for="flight-number">Número de vuelo</label><input id="flight-number" required placeholder="Ej: DM123"></div><div class="input-group"><label for="flight-date">Fecha</label><input id="flight-date" type="date" required></div><div class="input-group"><label for="flight-time">Hora de llegada</label><input id="flight-time" type="time" required></div><div class="input-group"><label for="flight-origin">Origen</label><input id="flight-origin" required placeholder="Ej: Bogotá"></div><div class="input-group"><label for="flight-status">Estado</label><select id="flight-status"><option>Programado</option><option>En vuelo</option><option>Aterrizó</option><option>Retrasado</option></select></div><button class="primary-btn full-btn">Agregar vuelo</button></form><div id="flight-list" class="flight-list"></div></section>
-<section id="diario" class="section"><div class="section-header"><p class="eyebrow small">Para siempre</p><h2>📖 Diario de nuestra aventura</h2><p>Escriban aquí lo que quieran recordar cuando termine el viaje.</p></div><form id="journal-form" class="event-form"><div class="input-group"><label for="journal-title">Título</label><input id="journal-title" required placeholder="El día que más me gustó..."></div><div class="input-group"><label for="journal-author">Tu nombre</label><input id="journal-author" required placeholder="¿Quién escribe?"></div><div class="input-group full"><label for="journal-text">Comparte tu 
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>40 en Punta Cana 2026</title>
+    <meta name="description" content="Agenda, recuerdos, playlists, vuelos, fotos y actividades para celebrar nuestras 40 en Punta Cana." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="topbar">
+        <div class="brand">40 en Punta Cana</div>
+        <nav class="nav-links">
+          <a href="#agenda">Agenda</a>
+          <a href="#fotos">Fotos</a>
+          <a href="#videos">Videos</a>
+          <a href="#essentials">Necesidades</a>
+          <a href="#wifi">Wi‑Fi</a>
+          <a href="#musica">Música</a>
+        </nav>
+      </div>
+
+      <div class="hero-content">
+        <div>
+          <p class="eyebrow">Punta Cana 2026</p>
+          <h1>Celebrando 40 años, risas, playa y recuerdos.</h1>
+          <p class="subtitle">
+            Todo reunido para organizar el viaje, guardar recuerdos, compartir videos, tener la agenda clara,
+            preparar la maleta y disfrutar cada minuto con las amigas.
+          </p>
+          <div class="hero-actions">
+            <a class="primary-btn" href="#agenda">Ver agenda</a>
+            <button class="primary-btn secondary" type="button" id="enable-alerts-btn">Activar alertas</button>
+          </div>
+        </div>
+
+        <aside class="hero-card">
+          <p class="eyebrow">Riu Palace Punta Cana</p>
+          <h3>07/11 - 14/11</h3>
+          <p>Actividades, fiestas, relajación, fotos y momentos inolvidables.</p>
+          <ul class="mini-list">
+            <li>Alarma automática antes de cada actividad</li>
+            <li>Playlist de la playa</li>
+            <li>Videos y fotos del viaje</li>
+            <li>Lista útil para empacar</li>
+          </ul>
+        </aside>
+      </div>
+    </header>
+
+    <main>
+      <section id="agenda" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Agenda</p>
+          <h2>⏰ Actividades del viaje</h2>
+          <p>Organiza el plan del viaje y recibe una alarma 30 minutos antes de cada actividad.</p>
+        </div>
+
+        <form id="event-form" class="event-form">
+          <div class="input-group">
+            <label for="event-title">Título</label>
+            <input id="event-title" type="text" placeholder="Brunch en la playa" required />
+          </div>
+
+          <div class="input-group">
+            <label for="event-date">Fecha</label>
+            <input id="event-date" type="date" required />
+          </div>
+
+          <div class="input-group">
+            <label for="event-time">Hora</label>
+            <input id="event-time" type="time" required />
+          </div>
+
+          <div class="input-group">
+            <label for="event-location">Lugar</label>
+            <input id="event-location" type="text" placeholder="Riu Palace Punta Cana" required />
+          </div>
+
+          <div class="input-group full">
+            <label for="event-detail">Detalle</label>
+            <textarea id="event-detail" placeholder="Descripción de la actividad" required></textarea>
+          </div>
+
+          <div class="input-group full full-btn">
+            <button class="primary-btn" type="submit">Agregar actividad</button>
+          </div>
+        </form>
+
+        <div id="event-list" class="event-list"></div>
+      </section>
+
+      <section class="section spotlight">
+        <div class="section-header">
+          <p class="eyebrow small">Plan del resort</p>
+          <h2>🌴 Riu Palace Punta Cana · 07/11 al 14/11</h2>
+        </div>
+        <div class="spotlight-grid">
+          <div class="spotlight-card">
+            <span>07/11</span>
+            <h3>Check-in + bienvenida</h3>
+            <p>Primer día con fotos, bienvenida y puesta en marcha del viaje.</p>
+          </div>
+          <div class="spotlight-card">
+            <span>09/11</span>
+            <h3>Cena especial</h3>
+            <p>Velada con música, buena vibra y recuerdos para toda la vida.</p>
+          </div>
+          <div class="spotlight-card">
+            <span>10/11</span>
+            <h3>Pool day</h3>
+            <p>Piscina, relax, selfies y charla con una vista increíble.</p>
+          </div>
+          <div class="spotlight-card">
+            <span>11/11</span>
+            <h3>Fiesta principal</h3>
+            <p>Celebración de nuestras 40 con música, baile y la mejor energía.</p>
+          </div>
+          <div class="spotlight-card">
+            <span>13/11</span>
+            <h3>Brunch + mar</h3>
+            <p>Un momento para descansar, sonreír y disfrutar del último gran día.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="fotos" class="section gallery-section">
+        <div class="section-header">
+          <p class="eyebrow small">Galería</p>
+          <h2>📸 Fotos de todas</h2>
+          <p>Suban sus mejores fotos del viaje y descarguen las que más les gusten.</p>
+        </div>
+        <label for="photo-input" class="upload-btn">Subir fotos</label>
+        <input id="photo-input" type="file" accept="image/*" multiple />
+        <div id="photo-gallery" class="photo-gallery"></div>
+      </section>
+
+      <section id="videos" class="section gallery-section">
+        <div class="section-header">
+          <p class="eyebrow small">Videos</p>
+          <h2>🎥 Videos del viaje</h2>
+          <p>Guarden los mejores momentos en video para volver a verlos siempre.</p>
+        </div>
+        <label for="video-input" class="upload-btn">Subir videos</label>
+        <input id="video-input" type="file" accept="video/*" multiple />
+        <div id="video-gallery" class="video-gallery"></div>
+      </section>
+
+      <section id="outfits" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Inspiración</p>
+          <h2>👗 Sugerencias de outfits</h2>
+          <p>Ideas para playa, cenas, fiestas y noches especiales.</p>
+        </div>
+        <div class="outfit-grid">
+          <a href="https://www.pinterest.com/search/pins/?q=beach%20outfit%20women" target="_blank" rel="noreferrer">Beach look</a>
+          <a href="https://www.pinterest.com/search/pins/?q=party%20dress%20vacation" target="_blank" rel="noreferrer">Fiesta</a>
+          <a href="https://www.pinterest.com/search/pins/?q=caribbean%20vacation%20outfits" target="_blank" rel="noreferrer">Vacaciones</a>
+          <a href="https://www.pinterest.com/search/pins/?q=night%20out%20summer%20outfit" target="_blank" rel="noreferrer">Noche</a>
+        </div>
+      </section>
+
+      <section id="essentials" class="section no-olvides-section">
+        <div class="section-header">
+          <p class="eyebrow small">Lista</p>
+          <h2>🧳 Lista de necesidades para viajar</h2>
+          <p>Recuerden todo lo que hace falta para el viaje.</p>
+        </div>
+
+        <form id="essentials-form" class="mini-form">
+          <input id="essential-input" type="text" placeholder="Agregar item" />
+          <button class="primary-btn" type="submit">Agregar</button>
+        </form>
+
+        <ul id="essentials-list" class="check-list"></ul>
+      </section>
+
+      <section id="wifi" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Conectividad</p>
+          <h2>📶 Wi‑Fi en aeropuertos y resort</h2>
+          <p>Opciones útiles para mantenerse conectadas sin complicaciones.</p>
+        </div>
+        <ul id="wifi-list" class="wifi-list"></ul>
+      </section>
+
+      <section id="musica" class="section no-olvides-section">
+        <div class="section-header">
+          <p class="eyebrow small">Música</p>
+          <h2>🎵 Playlist para Punta Cana</h2>
+          <p>Links para ponerle buena vibra al viaje y a la playa.</p>
+        </div>
+        <div id="playlist-list" class="playlist-grid"></div>
+      </section>
+
+      <section id="tiktok" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">TikTok</p>
+          <h2>✨ Videos relacionados con amigas, playa y fiesta</h2>
+          <p>Ideas para inspirarse y guardar clips de la vibe del viaje.</p>
+        </div>
+        <div id="tiktok-list" class="playlist-grid"></div>
+      </section>
+
+      <section id="vuelos" class="section no-olvides-section">
+        <div class="section-header">
+          <p class="eyebrow small">Llegadas</p>
+          <h2>✈️ Nuestros vuelos</h2>
+          <p>Registra cada vuelo y lleva el control de horarios y origen.</p>
+        </div>
+
+        <form id="flight-form" class="event-form compact-form">
+          <div class="input-group">
+            <label for="flight-airline">Aerolínea</label>
+            <input id="flight-airline" type="text" placeholder="American Airlines" required />
+          </div>
+          <div class="input-group">
+            <label for="flight-number">Vuelo</label>
+            <input id="flight-number" type="text" placeholder="AA123" required />
+          </div>
+          <div class="input-group">
+            <label for="flight-date">Fecha</label>
+            <input id="flight-date" type="date" required />
+          </div>
+          <div class="input-group">
+            <label for="flight-time">Hora</label>
+            <input id="flight-time" type="time" required />
+          </div>
+          <div class="input-group">
+            <label for="flight-origin">Origen</label>
+            <input id="flight-origin" type="text" placeholder="Santo Domingo" required />
+          </div>
+          <div class="input-group">
+            <label for="flight-status">Estado</label>
+            <select id="flight-status">
+              <option value="Confirmado">Confirmado</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Llegó">Llegó</option>
+            </select>
+          </div>
+          <div class="input-group full full-btn">
+            <button class="primary-btn" type="submit">Agregar vuelo</button>
+          </div>
+        </form>
+
+        <div id="flight-list" class="flight-list"></div>
+      </section>
+
+      <section id="quotes" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Frases</p>
+          <h2>💛 Frases bonitas para nuestras 40</h2>
+        </div>
+        <ul id="quote-list" class="quote-list"></ul>
+      </section>
+
+      <section id="diario" class="section">
+        <div class="section-header">
+          <p class="eyebrow small">Para siempre</p>
+          <h2>📖 Diario de nuestra aventura</h2>
+          <p>Escriban recuerdos, frases, momentos especiales y todo lo que quieran guardar.</p>
+        </div>
+
+        <form id="journal-form" class="event-form compact-form">
+          <div class="input-group">
+            <label for="journal-title">Título</label>
+            <input id="journal-title" type="text" placeholder="Recuerdo favorito" required />
+          </div>
+          <div class="input-group">
+            <label for="journal-author">Autor/a</label>
+            <input id="journal-author" type="text" placeholder="Tu nombre" required />
+          </div>
+          <div class="input-group full">
+            <label for="journal-text">Texto</label>
+            <textarea id="journal-text" placeholder="Escribe aquí lo que quieras recordar..." required></textarea>
+          </div>
+          <div class="input-group full full-btn">
+            <button class="primary-btn" type="submit">Guardar recuerdo</button>
+          </div>
+        </form>
+
+        <div id="journal-list" class="journal-list"></div>
+      </section>
+    </main>
+
+    <footer class="footer">Con amor para nuestras 40. Punta Cana 2026 💖</footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
