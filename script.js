@@ -111,6 +111,28 @@ function enableAlerts() {
   }
 }
 
+async function syncEventToGoogleCalendar(item) {
+  const response = await fetch('/api/calendar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: item.title,
+      date: item.date,
+      time: item.time,
+      location: item.location,
+      detail: item.detail,
+      reminderMinutes: 10
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || 'No se pudo sincronizar con Google Calendar');
+  }
+
+  return payload;
+}
+
 function scheduleAlarm(item) {
   if (!item?.date || !item?.time) return;
   const when = eventDateValue(item).getTime() - 30 * 60 * 1000;
@@ -147,7 +169,7 @@ function renderEvents() {
   events.forEach(scheduleAlarm);
 }
 
-function handleEventSubmit(event) {
+async function handleEventSubmit(event) {
   event.preventDefault();
 
   const titleEl = document.querySelector('#event-title');
@@ -172,16 +194,23 @@ function handleEventSubmit(event) {
     return;
   }
 
-  const current = read(STORAGE_KEYS.events, defaultEvents);
-  save(STORAGE_KEYS.events, [item, ...current]);
+  try {
+    await syncEventToGoogleCalendar(item);
+    const current = read(STORAGE_KEYS.events, defaultEvents);
+    save(STORAGE_KEYS.events, [item, ...current]);
 
-  titleEl.value = '';
-  dateEl.value = '';
-  timeEl.value = '';
-  locationEl.value = '';
-  detailEl.value = '';
+    titleEl.value = '';
+    dateEl.value = '';
+    timeEl.value = '';
+    locationEl.value = '';
+    detailEl.value = '';
 
-  renderEvents();
+    renderEvents();
+    alert('✅ Evento agregado y sincronizado con Google Calendar');
+  } catch (error) {
+    console.error(error);
+    alert('No se pudo sincronizar con Google Calendar: ' + error.message);
+  }
 }
 
 function readFilesAsDataUrls(files) {
