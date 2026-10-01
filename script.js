@@ -216,18 +216,54 @@ function renderPhotos() {
   `).join('');
 }
 
+function normalizeVideos(videos) {
+  return (Array.isArray(videos) ? videos : []).map((video, index) => {
+    if (typeof video === 'string') {
+      return { id: uid('video'), name: `video-${index + 1}.mp4`, url: video };
+    }
+    if (video && typeof video === 'object' && video.url) {
+      return {
+        id: video.id || uid('video'),
+        name: video.name || `video-${index + 1}.mp4`,
+        url: video.url
+      };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+function isValidVideo(file) {
+  if (!file) return false;
+
+  const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
+  const maxSize = 20 * 1024 * 1024;
+  const extension = (file.name || '').toLowerCase();
+
+  if (!validTypes.includes(file.type) && !/\.(mp4|webm|mov|mkv)$/i.test(extension)) {
+    alert('Archivo no válido. Usa un video MP4, WEBM, MOV o MKV.');
+    return false;
+  }
+
+  if (file.size > maxSize) {
+    alert('El video es demasiado grande. Sube uno de hasta 20 MB.');
+    return false;
+  }
+
+  return true;
+}
+
 function renderVideos() {
   const videoGallery = document.querySelector('#video-gallery');
   if (!videoGallery) return;
 
-  const videos = read(STORAGE_KEYS.videos, []);
-  videoGallery.innerHTML = videos.map((src, index) => `
+  const videos = normalizeVideos(read(STORAGE_KEYS.videos, []));
+  videoGallery.innerHTML = videos.map((video, index) => `
     <figure class="video-card">
-      <video src="${src}" controls></video>
+      <video src="${video.url}" controls></video>
       <button type="button" class="btn-delete-video" data-video-index="${index}" title="Borrar video">✕</button>
-      <a class="download-btn" href="${src}" download="video-${index + 1}.mp4" title="Descargar video">⬇️</a>
+      <a class="download-btn" href="${video.url}" download="${video.name || `video-${index + 1}.mp4`}" title="Descargar video">⬇️</a>
     </figure>
-  `).join('');
+  `).join('') || '<p>No hay videos aún. Súbelo desde la biblioteca del celular.</p>';
 }
 
 function renderFlights() {
@@ -564,11 +600,21 @@ function initEvents() {
 
   const videoInput = document.querySelector('#video-input');
   if (videoInput) {
-    videoInput.addEventListener('change', async (event) => {
-      if (!event.target.files?.length) return;
-      const urls = await readFilesAsDataUrls(event.target.files);
-      const current = read(STORAGE_KEYS.videos, []);
-      save(STORAGE_KEYS.videos, urls.concat(current));
+    videoInput.addEventListener('change', (event) => {
+      const files = Array.from(event.target.files || []).filter(isValidVideo);
+      if (!files.length) {
+        videoInput.value = '';
+        return;
+      }
+
+      const current = normalizeVideos(read(STORAGE_KEYS.videos, []));
+      const newVideos = files.map((file) => ({
+        id: uid('video'),
+        name: file.name,
+        url: URL.createObjectURL(file)
+      }));
+
+      save(STORAGE_KEYS.videos, [...newVideos, ...current]);
       videoInput.value = '';
       renderVideos();
     });
@@ -579,8 +625,16 @@ function initEvents() {
     theVideoGallery.addEventListener('click', (event) => {
       const button = event.target.closest('[data-video-index]');
       if (!button) return;
-      const videos = read(STORAGE_KEYS.videos, []);
-      videos.splice(Number(button.dataset.videoIndex), 1);
+
+      const videos = normalizeVideos(read(STORAGE_KEYS.videos, []));
+      const index = Number(button.dataset.videoIndex);
+      const targetVideo = videos[index];
+
+      if (targetVideo?.url?.startsWith('blob:')) {
+        URL.revokeObjectURL(targetVideo.url);
+      }
+
+      videos.splice(index, 1);
       save(STORAGE_KEYS.videos, videos);
       renderVideos();
     });
