@@ -2,7 +2,8 @@ import {
   initializeApp, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, runTransaction,
   serverTimestamp, query, orderBy,
-  getStorage, storageRef, uploadBytesResumable, getDownloadURL, deleteObject
+  getStorage, storageRef, uploadBytesResumable, getDownloadURL, deleteObject,
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile
 } from './vendor/firebase.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -17,6 +18,7 @@ try {
   db = initializeFirestore(app, {});
 }
 const storage = getStorage(app);
+const auth = getAuth(app);
 
 /* ---------- Datos fijos ---------- */
 
@@ -72,7 +74,14 @@ const tiktoks = [
 const $ = (selector) => document.querySelector(selector);
 const state = { events: [], flights: [], journal: [], essentials: [], photos: [], videos: [] };
 const alarmTimers = new Map();
+const unsubscribers = [];
 let editingEventId = null;
+let currentName = '';
+
+// Quién crea cada cosa (se guarda junto con el dato).
+function stamp() {
+  return { createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || '', createdByName: currentName };
+}
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
@@ -123,10 +132,10 @@ function reportError(error, action = 'guardar') {
 
 function listen(name, render) {
   const q = query(collection(db, name), orderBy('createdAt', 'desc'));
-  onSnapshot(q, (snapshot) => {
+  unsubscribers.push(onSnapshot(q, (snapshot) => {
     state[name] = snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }));
     render();
-  }, (error) => reportError(error, 'cargar los datos'));
+  }, (error) => reportError(error, 'cargar los datos')));
 }
 
 /* ---------- Agenda ---------- */
@@ -183,7 +192,7 @@ async function handleEventSubmit(event) {
     if (editingEventId) {
       await updateDoc(doc(db, 'events', editingEventId), item);
     } else {
-      await addDoc(collection(db, 'events'), { ...item, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'events'), { ...item, ...stamp() });
     }
     setEventFormMode(null);
   } catch (error) {
@@ -312,10 +321,7 @@ function uploadFile(path, blob, contentType, label) {
 }
 
 function askUploader() {
-  const remembered = localGet('nuestros40-name', '');
-  const name = (prompt('¿Quién las sube?', remembered || 'Una amiga') || '').trim() || 'Una amiga';
-  localSet('nuestros40-name', name);
-  return name.slice(0, 80);
+  return (currentName || 'Una amiga').slice(0, 80);
 }
 
 async function handlePhotoInput(event) {
@@ -329,7 +335,7 @@ async function handlePhotoInput(event) {
       const type = blob.type || file.type || 'image/jpeg';
       const path = `photos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${type.split('/')[1] || 'jpg'}`;
       const url = await uploadFile(path, blob, type, `foto ${index + 1} de ${files.length}`);
-      await addDoc(collection(db, 'photos'), { url, path, uploadedBy, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'photos'), { url, path, uploadedBy, ...stamp() });
     }
     showStatus('');
   } catch (error) {
@@ -362,7 +368,7 @@ async function handleVideoInput(event) {
       const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
       const path = `videos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${ext}`;
       const url = await uploadFile(path, file, type, `video ${index + 1} de ${valid.length}`);
-      await addDoc(collection(db, 'videos'), { url, path, name: file.name.slice(0, 200), uploadedBy, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'videos'), { url, path, name: file.name.slice(0, 200), uploadedBy, ...stamp() });
     }
     showStatus('');
   } catch (error) {
@@ -469,7 +475,7 @@ function bindForms() {
       return;
     }
     try {
-      await addDoc(collection(db, 'flights'), { ...flight, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'flights'), { ...flight, ...stamp() });
       event.target.reset();
     } catch (error) { reportError(error); }
   });
@@ -487,8 +493,9 @@ function bindForms() {
       return;
     }
     try {
-      await addDoc(collection(db, 'journal'), { ...entry, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'journal'), { ...entry, ...stamp() });
       event.target.reset();
+      $('#journal-author').value = currentName;
     } catch (error) { reportError(error); }
   });
   bindSimpleDelete('#journal-list', 'data-delete-journal', 'journal', (j) => `“${j.title}”`);
@@ -501,7 +508,7 @@ function bindForms() {
       return;
     }
     try {
-      await addDoc(collection(db, 'essentials'), { text, createdAt: serverTimestamp() });
+      await addDoc(collection(db, 'essentials'), { text, ...stamp() });
       event.target.reset();
     } catch (error) { reportError(error); }
   });
@@ -541,8 +548,8 @@ async function seedDefaultsOnce() {
       const seedRef = doc(db, 'meta', 'seed');
       if ((await tx.get(seedRef)).exists()) return;
       tx.set(seedRef, { at: serverTimestamp() });
-      defaultEvents.forEach(({ id, ...item }) => tx.set(doc(db, 'events', id), { ...item, createdAt: serverTimestamp() }));
-      defaultEssentials.forEach((text, index) => tx.set(doc(db, 'essentials', `default-${index + 1}`), { text, createdAt: serverTimestamp() }));
+      defaultEvents.forEach(({ id, ...item }) => tx.set(doc(db, 'events', id), { ...item, ...stamp() }));
+      defaultEssentials.forEach((text, index) => tx.set(doc(db, 'essentials', `default-${index + 1}`), { text, ...stamp() }));
     });
   } catch (error) {
     reportError(error, 'preparar la agenda');
@@ -569,7 +576,7 @@ async function migrateLocalData() {
       const item = { title: e.title, date: e.date, time: e.time, location: e.location || '', detail: e.detail || '' };
       const original = defaultEvents.find((d) => d.id === e.id);
       if (original && ['title', 'date', 'time', 'location', 'detail'].every((k) => original[k] === item[k])) return;
-      writes.push(setDoc(doc(db, 'events', String(e.id || hashId('event', item)).replace(/\//g, '-')), { ...item, createdAt: serverTimestamp() }));
+      writes.push(setDoc(doc(db, 'events', String(e.id || hashId('event', item)).replace(/\//g, '-')), { ...item, ...stamp() }));
     });
   }
 
@@ -578,7 +585,7 @@ async function migrateLocalData() {
     flights.forEach((f) => {
       if (!f?.airline) return;
       const item = { airline: f.airline, number: f.number || '', date: f.date || '', time: f.time || '', origin: f.origin || '', status: f.status || 'Confirmado' };
-      writes.push(setDoc(doc(db, 'flights', hashId('flight', item)), { ...item, createdAt: serverTimestamp() }));
+      writes.push(setDoc(doc(db, 'flights', hashId('flight', item)), { ...item, ...stamp() }));
     });
   }
 
@@ -587,7 +594,7 @@ async function migrateLocalData() {
     journal.forEach((j) => {
       if (!j?.title || !j?.text) return;
       const item = { title: j.title, author: j.author || '', text: j.text };
-      writes.push(setDoc(doc(db, 'journal', hashId('journal', item)), { ...item, createdAt: serverTimestamp() }));
+      writes.push(setDoc(doc(db, 'journal', hashId('journal', item)), { ...item, ...stamp() }));
     });
   }
 
@@ -595,7 +602,7 @@ async function migrateLocalData() {
   if (Array.isArray(essentials)) {
     essentials.forEach((text) => {
       if (typeof text !== 'string' || !text.trim() || defaultEssentials.includes(text)) return;
-      writes.push(setDoc(doc(db, 'essentials', hashId('essential', text)), { text: text.trim(), createdAt: serverTimestamp() }));
+      writes.push(setDoc(doc(db, 'essentials', hashId('essential', text)), { text: text.trim(), ...stamp() }));
     });
   }
 
@@ -608,7 +615,7 @@ async function migrateLocalData() {
         const blob = await (await fetch(src)).blob();
         const path = `photos/${hashId('migrated', src.slice(0, 2000))}.jpg`;
         const url = await uploadFile(path, blob, blob.type || 'image/jpeg', 'fotos guardadas');
-        await setDoc(doc(db, 'photos', hashId('photo', path)), { url, path, uploadedBy: (photo?.uploadedBy || 'Una amiga').slice(0, 80), createdAt: serverTimestamp() });
+        await setDoc(doc(db, 'photos', hashId('photo', path)), { url, path, uploadedBy: (photo?.uploadedBy || 'Una amiga').slice(0, 80), ...stamp() });
       })());
     }
   }
@@ -626,14 +633,126 @@ async function migrateLocalData() {
   }
 }
 
+/* ---------- Perfiles (usuario + PIN de 4 dígitos) ---------- */
+
+// Por dentro se usa el login de Firebase con un correo inventado a partir del usuario.
+function usernameToEmail(username) {
+  return `${username.toLowerCase()}@nuestros40.app`;
+}
+
+function pinToPassword(pin) {
+  return `n40-${pin}`; // Firebase pide mínimo 6 caracteres
+}
+
+function authErrorMessage(error) {
+  switch (error?.code) {
+    case 'auth/email-already-in-use': return 'Ese nombre de usuario ya existe. Elige otro o entra con él.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-email': return 'Usuario o PIN incorrecto.';
+    case 'auth/too-many-requests': return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
+    case 'auth/network-request-failed': return 'Sin conexión. Revisa tu internet.';
+    case 'auth/operation-not-allowed': return 'El inicio de sesión todavía no está activado. Avísale a quien administra el sitio.';
+    default: return 'No se pudo entrar. Inténtalo de nuevo.';
+  }
+}
+
+function setAuthMode(mode) {
+  const form = $('#auth-form');
+  form.dataset.mode = mode;
+  $('#auth-title').textContent = mode === 'signup' ? 'Crea tu perfil' : 'Entra a tu perfil';
+  $('#auth-submit').textContent = mode === 'signup' ? 'Crear perfil' : 'Entrar';
+  $('#auth-switch').textContent = mode === 'signup' ? '¿Ya tienes perfil? Entra aquí' : '¿Primera vez? Crea tu perfil';
+  $('#auth-pin2-group').hidden = mode !== 'signup';
+  $('#auth-error').textContent = '';
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const mode = $('#auth-form').dataset.mode;
+  const username = $('#auth-username').value.trim();
+  const pin = $('#auth-pin').value.trim();
+  const errorBox = $('#auth-error');
+  errorBox.textContent = '';
+
+  if (!/^[a-zA-Z0-9._-]{3,20}$/.test(username)) {
+    errorBox.textContent = 'El usuario debe tener de 3 a 20 letras o números, sin espacios ni tildes.';
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    errorBox.textContent = 'El PIN debe tener exactamente 4 números.';
+    return;
+  }
+  if (mode === 'signup' && $('#auth-pin2').value.trim() !== pin) {
+    errorBox.textContent = 'Los PIN no coinciden.';
+    return;
+  }
+
+  const button = $('#auth-submit');
+  button.disabled = true;
+  try {
+    if (mode === 'signup') {
+      const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(username), pinToPassword(pin));
+      await updateProfile(cred.user, { displayName: username });
+      startSession(cred.user);
+    } else {
+      await signInWithEmailAndPassword(auth, usernameToEmail(username), pinToPassword(pin));
+    }
+    event.target.reset();
+  } catch (error) {
+    console.error(error);
+    errorBox.textContent = authErrorMessage(error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+let sessionUid = null;
+
+function startSession(user) {
+  currentName = user.displayName || user.email.split('@')[0];
+  $('#user-name').textContent = currentName;
+  $('#journal-author').value = currentName;
+  $('#auth-screen').hidden = true;
+  document.body.classList.remove('locked');
+  localSet('nuestros40-has-profile', true);
+  if (sessionUid === user.uid) return;
+  sessionUid = user.uid;
+  listen('events', renderEvents);
+  listen('photos', renderPhotos);
+  listen('videos', renderVideos);
+  listen('flights', renderFlights);
+  listen('journal', renderJournal);
+  listen('essentials', renderEssentials);
+  seedDefaultsOnce().then(migrateLocalData);
+}
+
+function endSession() {
+  sessionUid = null;
+  currentName = '';
+  unsubscribers.splice(0).forEach((stop) => stop());
+  Object.keys(state).forEach((key) => { state[key] = []; });
+  ['#event-list', '#photo-gallery', '#video-gallery', '#flight-list', '#journal-list', '#essentials-list']
+    .forEach((selector) => { const el = $(selector); if (el) el.innerHTML = ''; });
+  $('#auth-screen').hidden = false;
+  document.body.classList.add('locked');
+  setAuthMode(localGet('nuestros40-has-profile', false) ? 'login' : 'signup');
+}
+
 /* ---------- Inicio ---------- */
 
 bindForms();
 renderStatic();
-listen('events', renderEvents);
-listen('photos', renderPhotos);
-listen('videos', renderVideos);
-listen('flights', renderFlights);
-listen('journal', renderJournal);
-listen('essentials', renderEssentials);
-seedDefaultsOnce().then(migrateLocalData);
+$('#auth-form').addEventListener('submit', handleAuthSubmit);
+$('#auth-switch').addEventListener('click', () => setAuthMode($('#auth-form').dataset.mode === 'signup' ? 'login' : 'signup'));
+$('#logout-btn').addEventListener('click', () => { if (confirm('¿Salir de tu perfil en este celular?')) signOut(auth); });
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // Al crear el perfil, el nombre llega un instante después; startSession lo completa.
+    if (user.displayName || sessionUid) startSession(user);
+    else setTimeout(() => { if (!sessionUid && auth.currentUser) startSession(auth.currentUser); }, 2000);
+  } else {
+    endSession();
+  }
+});

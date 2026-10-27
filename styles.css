@@ -605,3 +605,89 @@ select { cursor: pointer; }
   background: rgba(255, 255, 255, 0.9);
   text-align: center;
 }
+
+/* Perfiles */
+body.locked {
+  overflow: hidden;
+}
+
+.auth-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  background: linear-gradient(160deg, var(--mint), var(--lavender) 55%, var(--rose));
+}
+
+.auth-screen[hidden], #auth-pin2-group[hidden] {
+  display: none;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.8rem 1.4rem;
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.auth-card h2 {
+  margin: 0;
+  color: var(--deep-strong);
+  font-family: 'Playfair Display', serif;
+}
+
+.auth-help {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.auth-card input {
+  font-size: 16px;
+}
+
+#auth-pin, #auth-pin2 {
+  letter-spacing: 0.5em;
+}
+
+.auth-error {
+  min-height: 1.2em;
+  margin: 0;
+  color: #b0413e;
+  font-weight: 600;
+}
+
+.auth-switch {
+  border: 0;
+  background: none;
+  color: var(--ocean-deep);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.4rem;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.user-chip button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--deep);
+  font-weight: 700;
+  cursor: pointer;
+}

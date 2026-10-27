@@ -2,18 +2,23 @@ rules_version = '2';
 
 // Reglas de Firestore para Nuestros40PuntaCana2026.
 // Pegar en: Firebase Console → Firestore Database → Reglas → Publicar.
-// El sitio no tiene inicio de sesión: cualquiera con el link puede leer y editar,
-// pero solo en estas colecciones y con campos y tamaños controlados.
+// Solo quien tiene perfil (usuario + PIN) puede leer y editar,
+// y solo en estas colecciones, con campos y tamaños controlados.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function data() { return request.resource.data; }
     function text(field, max) { return data()[field] is string && data()[field].size() <= max; }
-    function stamped() { return data().createdAt is timestamp; }
+    function signedIn() { return request.auth != null; }
+    function stamped() {
+      return data().createdAt is timestamp
+        && (!('createdBy' in data()) || data().createdBy is string)
+        && (!('createdByName' in data()) || (data().createdByName is string && data().createdByName.size() <= 40));
+    }
 
     match /events/{id} {
-      allow read, delete: if true;
-      allow create, update: if data().keys().hasOnly(['title', 'date', 'time', 'location', 'detail', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create, update: if signedIn() && data().keys().hasOnly(['title', 'date', 'time', 'location', 'detail', 'createdAt', 'createdBy', 'createdByName'])
         && text('title', 120) && data().title.size() > 0
         && data().date is string && data().date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && data().time is string && data().time.matches('^[0-9]{2}:[0-9]{2}$')
@@ -21,40 +26,39 @@ service cloud.firestore {
     }
 
     match /flights/{id} {
-      allow read, delete: if true;
-      allow create, update: if data().keys().hasOnly(['airline', 'number', 'date', 'time', 'origin', 'status', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create, update: if signedIn() && data().keys().hasOnly(['airline', 'number', 'date', 'time', 'origin', 'status', 'createdAt', 'createdBy', 'createdByName'])
         && text('airline', 80) && text('number', 20) && text('date', 10) && text('time', 5)
         && text('origin', 120) && text('status', 20) && stamped();
     }
 
     match /journal/{id} {
-      allow read, delete: if true;
-      allow create, update: if data().keys().hasOnly(['title', 'author', 'text', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create, update: if signedIn() && data().keys().hasOnly(['title', 'author', 'text', 'createdAt', 'createdBy', 'createdByName'])
         && text('title', 150) && text('author', 80) && text('text', 5000) && stamped();
     }
 
     match /essentials/{id} {
-      allow read, delete: if true;
-      allow create, update: if data().keys().hasOnly(['text', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create, update: if signedIn() && data().keys().hasOnly(['text', 'createdAt', 'createdBy', 'createdByName'])
         && text('text', 150) && data().text.size() > 0 && stamped();
     }
 
     match /photos/{id} {
-      allow read, delete: if true;
-      allow create: if data().keys().hasOnly(['url', 'path', 'uploadedBy', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create: if signedIn() && data().keys().hasOnly(['url', 'path', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
         && text('url', 2000) && text('path', 300) && text('uploadedBy', 80) && stamped();
     }
 
     match /videos/{id} {
-      allow read, delete: if true;
-      allow create: if data().keys().hasOnly(['url', 'path', 'name', 'uploadedBy', 'createdAt'])
+      allow read, delete: if signedIn();
+      allow create: if signedIn() && data().keys().hasOnly(['url', 'path', 'name', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
         && text('url', 2000) && text('path', 300) && text('name', 200) && text('uploadedBy', 80) && stamped();
     }
 
     // Marca de que los datos iniciales ya se cargaron (se crea una sola vez).
     match /meta/seed {
-      allow read: if true;
-      allow create: if true;
+      allow read, create: if signedIn();
     }
   }
 }

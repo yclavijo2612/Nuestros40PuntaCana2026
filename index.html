@@ -10,10 +10,34 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="locked">
+    <div id="auth-screen" class="auth-screen">
+      <form id="auth-form" class="auth-card" data-mode="signup" autocomplete="on">
+        <p class="eyebrow">40 en Punta Cana 2026</p>
+        <h2 id="auth-title">Crea tu perfil</h2>
+        <p class="auth-help">Con tu perfil ves y compartes la agenda, fotos, videos y recuerdos con todas.</p>
+        <div class="input-group">
+          <label for="auth-username">Nombre de usuario</label>
+          <input id="auth-username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" placeholder="ej. ana" required />
+        </div>
+        <div class="input-group">
+          <label for="auth-pin">PIN de 4 dígitos</label>
+          <input id="auth-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" placeholder="••••" required />
+        </div>
+        <div class="input-group" id="auth-pin2-group">
+          <label for="auth-pin2">Repite el PIN</label>
+          <input id="auth-pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="••••" />
+        </div>
+        <p id="auth-error" class="auth-error" role="alert"></p>
+        <button id="auth-submit" class="primary-btn" type="submit">Crear perfil</button>
+        <button id="auth-switch" class="auth-switch" type="button">¿Ya tienes perfil? Entra aquí</button>
+      </form>
+    </div>
+
     <header class="hero">
       <div class="topbar">
         <div class="brand">40 en Punta Cana</div>
+        <div class="user-chip">👤 <span id="user-name"></span> <button id="logout-btn" type="button">Salir</button></div>
         <nav class="nav-links">
           <a href="#agenda">Agenda</a>
           <a href="#fotos">Fotos</a>
