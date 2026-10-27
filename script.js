@@ -3,7 +3,7 @@ import {
   collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, runTransaction,
   serverTimestamp, query, orderBy,
   getStorage, storageRef, uploadBytesResumable, getDownloadURL, deleteObject,
-  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, deleteUser, getDoc
 } from './vendor/firebase.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -658,34 +658,71 @@ function authErrorMessage(error) {
   }
 }
 
+const MODES = {
+  signup: { title: 'Crea tu perfil', submit: 'Crear perfil', switchText: '¿Ya tienes perfil? Entra aquí', fields: ['username', 'pin', 'pin2', 'code'] },
+  login: { title: 'Entra a tu perfil', submit: 'Entrar', switchText: '¿Primera vez? Crea tu perfil', fields: ['username', 'pin'] },
+  join: { title: 'Falta el código del grupo', submit: 'Unirme al grupo', switchText: 'Salir', fields: ['code'] }
+};
+
 function setAuthMode(mode) {
-  const form = $('#auth-form');
-  form.dataset.mode = mode;
-  $('#auth-title').textContent = mode === 'signup' ? 'Crea tu perfil' : 'Entra a tu perfil';
-  $('#auth-submit').textContent = mode === 'signup' ? 'Crear perfil' : 'Entrar';
-  $('#auth-switch').textContent = mode === 'signup' ? '¿Ya tienes perfil? Entra aquí' : '¿Primera vez? Crea tu perfil';
-  $('#auth-pin2-group').hidden = mode !== 'signup';
+  const config = MODES[mode];
+  $('#auth-form').dataset.mode = mode;
+  $('#auth-title').textContent = config.title;
+  $('#auth-submit').textContent = config.submit;
+  $('#auth-switch').textContent = config.switchText;
+  ['username', 'pin', 'pin2', 'code'].forEach((field) => {
+    const group = $(`#auth-${field}-group`);
+    group.hidden = !config.fields.includes(field);
+    group.querySelector('input').required = config.fields.includes(field);
+  });
   $('#auth-error').textContent = '';
 }
+
+function memberRef(uid) {
+  return doc(db, 'members', uid);
+}
+
+// El código se valida en las reglas de Firestore contra config/access,
+// que nadie puede leer desde el sitio. Si es incorrecto, Firestore lo rechaza.
+async function joinGroup(user, username, code) {
+  await setDoc(memberRef(user.uid), { username, code, createdAt: serverTimestamp() });
+}
+
+async function isMember(uid) {
+  try {
+    return (await getDoc(memberRef(uid))).exists();
+  } catch {
+    return true; // sin conexión: se deja entrar y las reglas deciden
+  }
+}
+
+let signingUp = false;
 
 async function handleAuthSubmit(event) {
   event.preventDefault();
   const mode = $('#auth-form').dataset.mode;
   const username = $('#auth-username').value.trim();
   const pin = $('#auth-pin').value.trim();
+  const code = $('#auth-code').value.trim();
   const errorBox = $('#auth-error');
   errorBox.textContent = '';
 
-  if (!/^[a-zA-Z0-9._-]{3,20}$/.test(username)) {
-    errorBox.textContent = 'El usuario debe tener de 3 a 20 letras o números, sin espacios ni tildes.';
-    return;
-  }
-  if (!/^\d{4}$/.test(pin)) {
-    errorBox.textContent = 'El PIN debe tener exactamente 4 números.';
-    return;
+  if (mode !== 'join') {
+    if (!/^[a-zA-Z0-9._-]{3,20}$/.test(username)) {
+      errorBox.textContent = 'El usuario debe tener de 3 a 20 letras o números, sin espacios ni tildes.';
+      return;
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      errorBox.textContent = 'El PIN debe tener exactamente 4 números.';
+      return;
+    }
   }
   if (mode === 'signup' && $('#auth-pin2').value.trim() !== pin) {
     errorBox.textContent = 'Los PIN no coinciden.';
+    return;
+  }
+  if (mode !== 'login' && !code) {
+    errorBox.textContent = 'Escribe el código del grupo.';
     return;
   }
 
@@ -693,16 +730,32 @@ async function handleAuthSubmit(event) {
   button.disabled = true;
   try {
     if (mode === 'signup') {
+      signingUp = true;
       const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(username), pinToPassword(pin));
+      try {
+        await joinGroup(cred.user, username, code);
+      } catch (error) {
+        // Código incorrecto: se borra el perfil recién creado para que pueda intentarlo de nuevo.
+        await deleteUser(cred.user).catch(() => signOut(auth));
+        throw { code: 'group/wrong-code' };
+      }
       await updateProfile(cred.user, { displayName: username });
+      signingUp = false;
       startSession(cred.user);
+    } else if (mode === 'join') {
+      const user = auth.currentUser;
+      if (!user) return setAuthMode('login');
+      await joinGroup(user, user.displayName || user.email.split('@')[0], code)
+        .catch(() => { throw { code: 'group/wrong-code' }; });
+      startSession(user);
     } else {
       await signInWithEmailAndPassword(auth, usernameToEmail(username), pinToPassword(pin));
     }
     event.target.reset();
   } catch (error) {
+    signingUp = false;
     console.error(error);
-    errorBox.textContent = authErrorMessage(error);
+    errorBox.textContent = error?.code === 'group/wrong-code' ? 'El código del grupo no es correcto.' : authErrorMessage(error);
   } finally {
     button.disabled = false;
   }
@@ -728,6 +781,12 @@ function startSession(user) {
   seedDefaultsOnce().then(migrateLocalData);
 }
 
+function showAuthScreen(mode) {
+  $('#auth-screen').hidden = false;
+  document.body.classList.add('locked');
+  setAuthMode(mode);
+}
+
 function endSession() {
   sessionUid = null;
   currentName = '';
@@ -735,9 +794,7 @@ function endSession() {
   Object.keys(state).forEach((key) => { state[key] = []; });
   ['#event-list', '#photo-gallery', '#video-gallery', '#flight-list', '#journal-list', '#essentials-list']
     .forEach((selector) => { const el = $(selector); if (el) el.innerHTML = ''; });
-  $('#auth-screen').hidden = false;
-  document.body.classList.add('locked');
-  setAuthMode(localGet('nuestros40-has-profile', false) ? 'login' : 'signup');
+  showAuthScreen(localGet('nuestros40-has-profile', false) ? 'login' : 'signup');
 }
 
 /* ---------- Inicio ---------- */
@@ -745,14 +802,18 @@ function endSession() {
 bindForms();
 renderStatic();
 $('#auth-form').addEventListener('submit', handleAuthSubmit);
-$('#auth-switch').addEventListener('click', () => setAuthMode($('#auth-form').dataset.mode === 'signup' ? 'login' : 'signup'));
+$('#auth-switch').addEventListener('click', () => {
+  const mode = $('#auth-form').dataset.mode;
+  if (mode === 'join') signOut(auth);
+  else setAuthMode(mode === 'signup' ? 'login' : 'signup');
+});
 $('#logout-btn').addEventListener('click', () => { if (confirm('¿Salir de tu perfil en este celular?')) signOut(auth); });
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    // Al crear el perfil, el nombre llega un instante después; startSession lo completa.
-    if (user.displayName || sessionUid) startSession(user);
-    else setTimeout(() => { if (!sessionUid && auth.currentUser) startSession(auth.currentUser); }, 2000);
-  } else {
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
     endSession();
+    return;
   }
+  if (signingUp || sessionUid === user.uid) return;
+  if (await isMember(user.uid)) startSession(user);
+  else showAuthScreen('join');
 });

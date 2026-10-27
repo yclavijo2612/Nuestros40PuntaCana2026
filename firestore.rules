@@ -2,14 +2,18 @@ rules_version = '2';
 
 // Reglas de Firestore para Nuestros40PuntaCana2026.
 // Pegar en: Firebase Console → Firestore Database → Reglas → Publicar.
-// Solo quien tiene perfil (usuario + PIN) puede leer y editar,
-// y solo en estas colecciones, con campos y tamaños controlados.
+// Solo quien tiene perfil (usuario + PIN) y se unió con el código del grupo
+// puede leer y editar, y solo en estas colecciones, con campos y tamaños controlados.
+// El código está en config/access (campo "code"); nadie puede leerlo desde el sitio.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function data() { return request.resource.data; }
     function text(field, max) { return data()[field] is string && data()[field].size() <= max; }
-    function signedIn() { return request.auth != null; }
+    function signedIn() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
     function stamped() {
       return data().createdAt is timestamp
         && (!('createdBy' in data()) || data().createdBy is string)
@@ -54,6 +58,15 @@ service cloud.firestore {
       allow read, delete: if signedIn();
       allow create: if signedIn() && data().keys().hasOnly(['url', 'path', 'name', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
         && text('url', 2000) && text('path', 300) && text('name', 200) && text('uploadedBy', 80) && stamped();
+    }
+
+    // Perfil de cada amiga: solo se crea con el código correcto.
+    match /members/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && data().keys().hasOnly(['username', 'code', 'createdAt'])
+        && text('username', 20) && data().createdAt is timestamp
+        && data().code == get(/databases/$(database)/documents/config/access).data.code;
     }
 
     // Marca de que los datos iniciales ya se cargaron (se crea una sola vez).

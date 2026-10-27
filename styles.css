@@ -623,7 +623,7 @@ body.locked {
   background: linear-gradient(160deg, var(--mint), var(--lavender) 55%, var(--rose));
 }
 
-.auth-screen[hidden], #auth-pin2-group[hidden] {
+.auth-screen[hidden], .auth-card .input-group[hidden] {
   display: none;
 }
 

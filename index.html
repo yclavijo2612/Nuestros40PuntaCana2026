@@ -16,17 +16,21 @@
         <p class="eyebrow">40 en Punta Cana 2026</p>
         <h2 id="auth-title">Crea tu perfil</h2>
         <p class="auth-help">Con tu perfil ves y compartes la agenda, fotos, videos y recuerdos con todas.</p>
-        <div class="input-group">
+        <div class="input-group" id="auth-username-group">
           <label for="auth-username">Nombre de usuario</label>
-          <input id="auth-username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" placeholder="ej. ana" required />
+          <input id="auth-username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" placeholder="ej. ana" />
         </div>
-        <div class="input-group">
+        <div class="input-group" id="auth-pin-group">
           <label for="auth-pin">PIN de 4 dígitos</label>
-          <input id="auth-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" placeholder="••••" required />
+          <input id="auth-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" placeholder="••••" />
         </div>
         <div class="input-group" id="auth-pin2-group">
           <label for="auth-pin2">Repite el PIN</label>
           <input id="auth-pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="••••" />
+        </div>
+        <div class="input-group" id="auth-code-group">
+          <label for="auth-code">Código del grupo</label>
+          <input id="auth-code" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" placeholder="Te lo pasan las organizadoras" />
         </div>
         <p id="auth-error" class="auth-error" role="alert"></p>
         <button id="auth-submit" class="primary-btn" type="submit">Crear perfil</button>

@@ -2,17 +2,22 @@ rules_version = '2';
 
 // Reglas de Storage para Nuestros40PuntaCana2026.
 // Pegar en: Firebase Console → Storage → Reglas → Publicar.
+// Al publicar, Firebase pide permiso para que Storage consulte Firestore: aceptarlo.
 service firebase.storage {
   match /b/{bucket}/o {
+    function member() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/members/$(request.auth.uid));
+    }
     match /photos/{file} {
-      allow read, delete: if request.auth != null;
-      allow create: if request.auth != null
+      allow read, delete: if member();
+      allow create: if member()
         && request.resource.size < 15 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
     match /videos/{file} {
-      allow read, delete: if request.auth != null;
-      allow create: if request.auth != null
+      allow read, delete: if member();
+      allow create: if member()
         && request.resource.size < 150 * 1024 * 1024
         && request.resource.contentType.matches('video/.*');
     }
