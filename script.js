@@ -1,16 +1,28 @@
-const STORAGE_KEYS = {
-  events: 'nuestros40-events',
-  photos: 'nuestros40-photos',
-  videos: 'nuestros40-videos',
-  flights: 'nuestros40-flights',
-  journal: 'nuestros40-journal',
-  essentials: 'nuestros40-essentials',
-  wifi: 'nuestros40-wifi',
-  quotes: 'nuestros40-quotes',
-  playlist: 'nuestros40-playlists',
-  tiktok: 'nuestros40-tiktok',
-  locations: 'nuestros40-locations'
-};
+import {
+  initializeApp, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, runTransaction,
+  serverTimestamp, query, orderBy,
+  getStorage, storageRef, uploadBytesResumable, getDownloadURL, deleteObject
+} from './vendor/firebase.js';
+import { firebaseConfig } from './firebase-config.js';
+
+/* ---------- Firebase ---------- */
+
+const app = initializeApp(firebaseConfig);
+let db;
+try {
+  // Caché local: el sitio sigue funcionando con mala señal y sincroniza al volver.
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+} catch {
+  db = initializeFirestore(app, {});
+}
+const storage = getStorage(app);
+
+/* ---------- Datos fijos ---------- */
+
+// Hora de Punta Cana (UTC-4, sin horario de verano). Así la hora de cada
+// actividad es la misma para todas, sin importar desde qué país abran el sitio.
+const TRIP_OFFSET = '-04:00';
 
 const defaultEvents = [
   { id: 'sample-1', title: 'Brunch en la playa', date: '2026-11-07', time: '10:00', location: 'Playa Bávaro', detail: 'Primera mañana de sol y buena vibra, con jugos, fotos y risas desde el amanecer.' },
@@ -21,22 +33,12 @@ const defaultEvents = [
 ];
 
 const defaultEssentials = [
-  'Pasaporte y documentos de viaje',
-  'Protector solar',
-  'Gafas de sol',
-  'Bloqueador labial',
-  'Cargador portátil',
-  'Cables de carga',
-  'Ropa de baño',
-  'Sandalias',
-  'Ropa ligera para la noche',
-  'Medicinas personales',
-  'Toalla pequeña',
-  'Dinero y tarjeta',
-  'Batería extra para el celular'
+  'Pasaporte y documentos de viaje', 'Protector solar', 'Gafas de sol', 'Bloqueador labial',
+  'Cargador portátil', 'Cables de carga', 'Ropa de baño', 'Sandalias', 'Ropa ligera para la noche',
+  'Medicinas personales', 'Toalla pequeña', 'Dinero y tarjeta', 'Batería extra para el celular'
 ];
 
-const defaultQuotes = [
+const quotes = [
   'A los 40, la sonrisa vale más que la perfección.',
   'Las mejores amigas no se alejan, solo se vuelven historias más hermosas.',
   '40 años, 40 recuerdos y 1 sola historia inolvidable.',
@@ -44,46 +46,52 @@ const defaultQuotes = [
   'En la vida no hay edad para ser felices, solo ganas de vivir.'
 ];
 
-const defaultWifi = [
+const wifiSpots = [
   { place: 'Santo Domingo Airport', info: 'Wi‑Fi gratuito en zonas de espera y áreas públicas. Requiere aceptar términos y usar conexión del aeropuerto.', type: 'Aeropuerto' },
   { place: 'Punta Cana Airport', info: 'Conectividad disponible en terminal y salas de espera. Busca la red pública del aeropuerto y acepta la condición.', type: 'Aeropuerto' },
   { place: 'Riu Palace Punta Cana', info: 'Wi‑Fi disponible en lobby, restaurante y zonas comunes. Ideal para compartir fotos y mensajes.', type: 'Hotel' },
   { place: 'Resort / lobby / restaurante', info: 'Conexión gratuita para huéspedes. La velocidad suele ser buena para mensajes y redes sociales.', type: 'Hotel' }
 ];
 
-const defaultPlaylists = [
+const playlists = [
   { title: 'Reggaeton + Playa', url: 'https://open.spotify.com/search/reggaeton%20playlist', emoji: '🔥' },
   { title: 'Salsa del Caribe', url: 'https://open.spotify.com/search/salsa%20caribe%20playlist', emoji: '💃' },
   { title: 'Latina Mix', url: 'https://open.spotify.com/search/latina%20playlist', emoji: '🎶' },
   { title: 'Vibra Tropical', url: 'https://open.spotify.com/search/tropical%20party%20playlist', emoji: '🌴' }
 ];
 
-const defaultTikTok = [
+const tiktoks = [
   { title: 'Amigas en la playa', url: 'https://www.tiktok.com/tag/amigasenlaplaya' },
   { title: 'Fiesta con amigas', url: 'https://www.tiktok.com/tag/fiestaconamigas' },
   { title: 'Beach girls', url: 'https://www.tiktok.com/tag/beachgirls' },
   { title: 'Punta Cana vibes', url: 'https://www.tiktok.com/tag/puntacanavibes' }
 ];
 
+/* ---------- Utilidades ---------- */
+
+const $ = (selector) => document.querySelector(selector);
+const state = { events: [], flights: [], journal: [], essentials: [], photos: [], videos: [] };
 const alarmTimers = new Map();
-const locationMap = null;
-
-function read(key, fallback) {
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  try { return JSON.parse(raw); } catch { return fallback; }
-}
-
-function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function uid(prefix = 'item') {
-  return `${prefix}-${crypto.randomUUID?.() || Date.now()}`;
-}
+let editingEventId = null;
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+function safeUrl(url) {
+  return /^https:\/\//i.test(url || '') ? esc(url) : '#';
+}
+
+function localGet(key, fallback) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+}
+
+function localSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* sin espacio o modo privado */ }
+}
+
+function eventDate(item) {
+  return new Date(`${item.date}T${item.time || '00:00'}:00${TRIP_OFFSET}`);
 }
 
 function dateText(dateString) {
@@ -92,677 +100,540 @@ function dateText(dateString) {
   return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
-function eventDateValue(event) {
-  return new Date(`${event.date}T${event.time || '00:00'}:00`);
+function byCreatedDesc(a, b) {
+  return (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now());
 }
 
-function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
+function showStatus(message, isError = false) {
+  const banner = $('#sync-status');
+  if (!banner) return;
+  banner.textContent = message;
+  banner.hidden = !message;
+  banner.classList.toggle('error', isError);
 }
 
-function enableAlerts() {
-  requestNotificationPermission();
-  if ('Notification' in window && Notification.permission === 'granted') {
-    alert('✅ Alertas activadas. Te avisaremos 30 minutos antes de cada actividad.');
+function reportError(error, action = 'guardar') {
+  console.error(error);
+  if (error?.code === 'permission-denied' || error?.code === 'storage/unauthorized') {
+    showStatus('⚠️ La base de datos todavía no tiene permisos configurados. Avísale a quien administra el sitio.', true);
   } else {
-    alert('📣 Si aceptas la notificación, podrás recibir alertas de tus actividades del viaje.');
+    alert(`No se pudo ${action}. Revisa tu conexión e inténtalo de nuevo.`);
   }
 }
 
-function scheduleAlarm(item) {
-  if (!item?.date || !item?.time) return;
-  const when = eventDateValue(item).getTime() - 30 * 60 * 1000;
-  const delay = when - Date.now();
-  if (delay <= 0 || delay > 2147483647) return;
-  clearTimeout(alarmTimers.get(item.id));
-  alarmTimers.set(item.id, setTimeout(() => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('⏰ Actividad en 30 minutos', { body: `${item.title} · ${item.location}` });
-    }
-    if (navigator.vibrate) navigator.vibrate([250, 100, 250]);
-  }, delay));
+function listen(name, render) {
+  const q = query(collection(db, name), orderBy('createdAt', 'desc'));
+  onSnapshot(q, (snapshot) => {
+    state[name] = snapshot.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }));
+    render();
+  }, (error) => reportError(error, 'cargar los datos'));
 }
+
+/* ---------- Agenda ---------- */
 
 function renderEvents() {
-  const eventList = document.querySelector('#event-list');
-  if (!eventList) return;
-
-  const events = [...read(STORAGE_KEYS.events, defaultEvents)].sort((a, b) => eventDateValue(a) - eventDateValue(b));
-  eventList.innerHTML = events.map((event) => `
+  const list = $('#event-list');
+  if (!list) return;
+  const events = [...state.events].sort((a, b) => eventDate(a) - eventDate(b));
+  list.innerHTML = events.map((item) => `
     <article class="event-card">
-      <span class="date">${dateText(event.date)} · ${esc(event.time)}</span>
-      <h3>${esc(event.title)}</h3>
-      <p class="event-location">📍 ${esc(event.location || 'Lugar pendiente')}</p>
-      <p>${esc(event.detail)}</p>
-      <small>⏰ Alarma automática 30 minutos antes</small>
+      <span class="date">${esc(dateText(item.date))} · ${esc(item.time)}</span>
+      <h3>${esc(item.title)}</h3>
+      <p class="event-location">📍 ${esc(item.location || 'Lugar pendiente')}</p>
+      <p>${esc(item.detail)}</p>
+      <small>⏰ Usa “Agregar al calendario” para que el celular te avise 30 minutos antes</small>
       <div class="event-actions">
-        <button type="button" class="btn-small" data-edit-event="${event.id}">✏️ Editar</button>
-        <button type="button" class="btn-small" data-delete-event="${event.id}">🗑️ Borrar</button>
+        <button type="button" class="btn-small" data-calendar-event="${esc(item.id)}">📱 Agregar al calendario</button>
+        <button type="button" class="btn-small" data-edit-event="${esc(item.id)}">✏️ Editar</button>
+        <button type="button" class="btn-small" data-delete-event="${esc(item.id)}">🗑️ Borrar</button>
       </div>
     </article>
-  `).join('');
-
+  `).join('') || '<p>No hay actividades todavía.</p>';
   events.forEach(scheduleAlarm);
 }
 
-function handleEventSubmit(event) {
+function setEventFormMode(item) {
+  editingEventId = item?.id || null;
+  $('#event-title').value = item?.title || '';
+  $('#event-date').value = item?.date || '';
+  $('#event-time').value = item?.time || '';
+  $('#event-location').value = item?.location || '';
+  $('#event-detail').value = item?.detail || '';
+  $('#event-submit').textContent = item ? 'Guardar cambios' : 'Agregar actividad';
+  $('#event-cancel').hidden = !item;
+  if (item) $('#event-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function handleEventSubmit(event) {
   event.preventDefault();
-
-  const titleEl = document.querySelector('#event-title');
-  const dateEl = document.querySelector('#event-date');
-  const timeEl = document.querySelector('#event-time');
-  const locationEl = document.querySelector('#event-location');
-  const detailEl = document.querySelector('#event-detail');
-
-  if (!titleEl || !dateEl || !timeEl || !locationEl || !detailEl) return;
-
   const item = {
-    id: uid('event'),
-    title: titleEl.value.trim(),
-    date: dateEl.value,
-    time: timeEl.value,
-    location: locationEl.value.trim(),
-    detail: detailEl.value.trim()
+    title: $('#event-title').value.trim(),
+    date: $('#event-date').value,
+    time: $('#event-time').value,
+    location: $('#event-location').value.trim(),
+    detail: $('#event-detail').value.trim()
   };
-
   if (!item.title || !item.date || !item.time || !item.location || !item.detail) {
     alert('Completa todos los campos de la actividad');
     return;
   }
-
-  const current = read(STORAGE_KEYS.events, defaultEvents);
-  save(STORAGE_KEYS.events, [item, ...current]);
-
-  titleEl.value = '';
-  dateEl.value = '';
-  timeEl.value = '';
-  locationEl.value = '';
-  detailEl.value = '';
-
-  renderEvents();
+  const button = $('#event-submit');
+  button.disabled = true;
+  try {
+    if (editingEventId) {
+      await updateDoc(doc(db, 'events', editingEventId), item);
+    } else {
+      await addDoc(collection(db, 'events'), { ...item, createdAt: serverTimestamp() });
+    }
+    setEventFormMode(null);
+  } catch (error) {
+    reportError(error);
+  } finally {
+    button.disabled = false;
+  }
 }
 
-function readFilesAsDataUrls(files) {
-  return Promise.all(Array.from(files).map((file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  })));
+async function handleEventListClick(event) {
+  const calendar = event.target.closest('[data-calendar-event]');
+  const edit = event.target.closest('[data-edit-event]');
+  const del = event.target.closest('[data-delete-event]');
+  const button = calendar || edit || del;
+  if (!button) return;
+  const id = button.dataset.calendarEvent ?? button.dataset.editEvent ?? button.dataset.deleteEvent;
+  const item = state.events.find((entry) => entry.id === id);
+  if (!item) return;
+
+  if (calendar) downloadCalendarEvent(item);
+  if (edit) setEventFormMode(item);
+  if (del && confirm(`¿Borrar “${item.title}” para todas?`)) {
+    try { await deleteDoc(doc(db, 'events', item.id)); } catch (error) { reportError(error, 'borrar'); }
+  }
 }
 
-function normalizePhotos(photos) {
-  return photos.map((photo) => typeof photo === 'string' ? { id: uid('photo'), src: photo, uploadedBy: 'Punta Cana 2026' } : photo);
+/* Alarma mientras la página está abierta (el aviso fiable es el del calendario). */
+function scheduleAlarm(item) {
+  if (!item?.date || !item?.time) return;
+  clearTimeout(alarmTimers.get(item.id));
+  const delay = eventDate(item).getTime() - 30 * 60 * 1000 - Date.now();
+  if (delay <= 0 || delay > 2147483647) return;
+  alarmTimers.set(item.id, setTimeout(() => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('⏰ Actividad en 30 minutos', { body: `${item.title} · ${item.location}` });
+    }
+    navigator.vibrate?.([250, 100, 250]);
+  }, delay));
 }
+
+function enableAlerts() {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  alert('📱 Para recibir el aviso aunque el celular esté bloqueado, toca “Agregar al calendario” en cada actividad. La alarma queda 30 minutos antes.');
+}
+
+function escapeIcs(value) {
+  return String(value ?? '').replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\r?\n/g, '\\n');
+}
+
+function icsDate(date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function downloadCalendarEvent(item) {
+  const start = eventDate(item);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Nuestros40 Punta Cana//ES', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:${item.id}@nuestros40puntacana`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(start)}`, `DTEND:${icsDate(end)}`,
+    `SUMMARY:${escapeIcs(item.title)}`, `LOCATION:${escapeIcs(item.location)}`, `DESCRIPTION:${escapeIcs(item.detail)}`,
+    'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:Recordatorio: ${escapeIcs(item.title)}`, 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'
+  ];
+  const url = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${(item.title || 'actividad').replace(/[^a-z0-9áéíóúñ]+/gi, '_')}-${item.date}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/* ---------- Fotos y videos ---------- */
 
 function renderPhotos() {
-  const photoGallery = document.querySelector('#photo-gallery');
-  if (!photoGallery) return;
-
-  const photos = normalizePhotos(read(STORAGE_KEYS.photos, [
-    { id: 'sample-photo-1', src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' },
-    { id: 'sample-photo-2', src: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' }
-  ]));
-
-  photoGallery.innerHTML = photos.map((photo, index) => `
+  const gallery = $('#photo-gallery');
+  if (!gallery) return;
+  gallery.innerHTML = state.photos.map((photo) => `
     <figure class="photo-card">
-      <img src="${photo.src}" alt="Foto de ${esc(photo.uploadedBy)}">
+      <img src="${safeUrl(photo.url)}" alt="Foto de ${esc(photo.uploadedBy)}" loading="lazy">
       <figcaption>📸 ${esc(photo.uploadedBy)}</figcaption>
-      <button type="button" class="btn-delete-photo" data-photo-index="${index}" title="Borrar foto">✕</button>
-      <a class="download-btn" href="${photo.src}" download="foto-${index + 1}.jpg" title="Descargar foto">⬇️</a>
+      <button type="button" class="btn-delete-photo" data-delete-photo="${esc(photo.id)}" title="Borrar foto">✕</button>
+      <a class="download-btn" href="${safeUrl(photo.url)}" target="_blank" rel="noopener" title="Abrir para guardar">⬇️</a>
     </figure>
-  `).join('');
-}
-
-function normalizeVideos(videos) {
-  return (Array.isArray(videos) ? videos : []).map((video, index) => {
-    if (typeof video === 'string') {
-      return { id: uid('video'), name: `video-${index + 1}.mp4`, url: video };
-    }
-    if (video && typeof video === 'object' && video.url) {
-      return {
-        id: video.id || uid('video'),
-        name: video.name || `video-${index + 1}.mp4`,
-        url: video.url
-      };
-    }
-    return null;
-  }).filter(Boolean);
-}
-
-function isValidVideo(file) {
-  if (!file) return false;
-
-  const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
-  const maxSize = 20 * 1024 * 1024;
-  const extension = (file.name || '').toLowerCase();
-
-  if (!validTypes.includes(file.type) && !/\.(mp4|webm|mov|mkv)$/i.test(extension)) {
-    alert('Archivo no válido. Usa un video MP4, WEBM, MOV o MKV.');
-    return false;
-  }
-
-  if (file.size > maxSize) {
-    alert('El video es demasiado grande. Sube uno de hasta 20 MB.');
-    return false;
-  }
-
-  return true;
+  `).join('') || '<p>No hay fotos aún. ¡Sube la primera!</p>';
 }
 
 function renderVideos() {
-  const videoGallery = document.querySelector('#video-gallery');
-  if (!videoGallery) return;
-
-  const videos = normalizeVideos(read(STORAGE_KEYS.videos, []));
-  videoGallery.innerHTML = videos.map((video, index) => `
+  const gallery = $('#video-gallery');
+  if (!gallery) return;
+  gallery.innerHTML = state.videos.map((video) => `
     <figure class="video-card">
-      <video src="${video.url}" controls></video>
-      <button type="button" class="btn-delete-video" data-video-index="${index}" title="Borrar video">✕</button>
-      <a class="download-btn" href="${video.url}" download="${video.name || `video-${index + 1}.mp4`}" title="Descargar video">⬇️</a>
+      <video src="${safeUrl(video.url)}" controls playsinline preload="metadata"></video>
+      <figcaption>🎥 ${esc(video.uploadedBy)}</figcaption>
+      <button type="button" class="btn-delete-video" data-delete-video="${esc(video.id)}" title="Borrar video">✕</button>
+      <a class="download-btn" href="${safeUrl(video.url)}" target="_blank" rel="noopener" title="Abrir para guardar">⬇️</a>
     </figure>
-  `).join('') || '<p>No hay videos aún. Súbelo desde la biblioteca del celular.</p>';
+  `).join('') || '<p>No hay videos aún. Súbelos desde la galería del celular.</p>';
 }
 
-function renderFlights() {
-  const flightList = document.querySelector('#flight-list');
-  if (!flightList) return;
+// Achica las fotos antes de subirlas: cargan más rápido y ocupan mucho menos.
+async function compressImage(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
 
-  const flights = read(STORAGE_KEYS.flights, []);
-  flightList.innerHTML = flights.map((flight, index) => `
+function uploadFile(path, blob, contentType, label) {
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(storageRef(storage, path), blob, { contentType });
+    task.on('state_changed',
+      (snap) => showStatus(`⏳ Subiendo ${label}… ${Math.round((snap.bytesTransferred / snap.totalBytes) * 100)}%`),
+      reject,
+      async () => resolve(await getDownloadURL(task.snapshot.ref)));
+  });
+}
+
+function askUploader() {
+  const remembered = localGet('nuestros40-name', '');
+  const name = (prompt('¿Quién las sube?', remembered || 'Una amiga') || '').trim() || 'Una amiga';
+  localSet('nuestros40-name', name);
+  return name.slice(0, 80);
+}
+
+async function handlePhotoInput(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!files.length) return;
+  const uploadedBy = askUploader();
+  try {
+    for (const [index, file] of files.entries()) {
+      const blob = await compressImage(file);
+      const type = blob.type || file.type || 'image/jpeg';
+      const path = `photos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${type.split('/')[1] || 'jpg'}`;
+      const url = await uploadFile(path, blob, type, `foto ${index + 1} de ${files.length}`);
+      await addDoc(collection(db, 'photos'), { url, path, uploadedBy, createdAt: serverTimestamp() });
+    }
+    showStatus('');
+  } catch (error) {
+    showStatus('');
+    reportError(error, 'subir la foto');
+  }
+}
+
+function videoType(file) {
+  if (file.type) return file.type;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  return { mov: 'video/quicktime', mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska' }[ext] || 'video/mp4';
+}
+
+async function handleVideoInput(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  const valid = files.filter((file) => {
+    if (file.size > 150 * 1024 * 1024) {
+      alert(`“${file.name}” pesa más de 150 MB. Recórtalo o súbelo más corto.`);
+      return false;
+    }
+    return true;
+  });
+  if (!valid.length) return;
+  const uploadedBy = askUploader();
+  try {
+    for (const [index, file] of valid.entries()) {
+      const type = videoType(file);
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const path = `videos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${ext}`;
+      const url = await uploadFile(path, file, type, `video ${index + 1} de ${valid.length}`);
+      await addDoc(collection(db, 'videos'), { url, path, name: file.name.slice(0, 200), uploadedBy, createdAt: serverTimestamp() });
+    }
+    showStatus('');
+  } catch (error) {
+    showStatus('');
+    reportError(error, 'subir el video');
+  }
+}
+
+async function deleteMedia(kind, id) {
+  const item = state[kind].find((entry) => entry.id === id);
+  if (!item || !confirm(kind === 'photos' ? '¿Borrar esta foto para todas?' : '¿Borrar este video para todas?')) return;
+  try {
+    await deleteDoc(doc(db, kind, id));
+    if (item.path) await deleteObject(storageRef(storage, item.path)).catch(() => {});
+  } catch (error) {
+    reportError(error, 'borrar');
+  }
+}
+
+/* ---------- Vuelos, diario y lista ---------- */
+
+function renderFlights() {
+  const list = $('#flight-list');
+  if (!list) return;
+  const flights = [...state.flights].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+  list.innerHTML = flights.map((flight) => `
     <article class="flight-card">
       <strong>✈️ ${esc(flight.airline)} ${esc(flight.number)}</strong>
-      <span>${esc(flight.date)} · ${esc(flight.time)}</span>
+      <span>${esc(dateText(flight.date))} · ${esc(flight.time)}</span>
       <span>Origen: ${esc(flight.origin)} → Punta Cana</span>
       <span class="flight-status">Estado: ${esc(flight.status)}</span>
-      <button type="button" class="btn-small" data-flight-index="${index}">🗑️ Borrar</button>
+      <button type="button" class="btn-small" data-delete-flight="${esc(flight.id)}">🗑️ Borrar</button>
     </article>
   `).join('') || '<p>No hay vuelos agregados aún.</p>';
 }
 
 function renderJournal() {
-  const journalList = document.querySelector('#journal-list');
-  if (!journalList) return;
-
-  const entries = read(STORAGE_KEYS.journal, []);
-  journalList.innerHTML = entries.map((entry, index) => `
+  const list = $('#journal-list');
+  if (!list) return;
+  list.innerHTML = state.journal.map((entry) => `
     <article class="journal-card">
       <h3>${esc(entry.title)}</h3>
       <p>${esc(entry.text)}</p>
       <small>✍️ ${esc(entry.author)}</small>
-      <button type="button" class="btn-small" data-journal-index="${index}">🗑️ Borrar</button>
+      <button type="button" class="btn-small" data-delete-journal="${esc(entry.id)}">🗑️ Borrar</button>
     </article>
   `).join('') || '<p>Aún no hay recuerdos escritos. ¡Sea la primera!</p>';
 }
 
+// Los ✓ de la maleta son personales: cada una marca lo que ya empacó en su celular.
 function renderEssentials() {
-  const essentialsList = document.querySelector('#essentials-list');
-  if (!essentialsList) return;
-
-  const items = read(STORAGE_KEYS.essentials, defaultEssentials);
-  essentialsList.innerHTML = items.map((item, index) => `
+  const list = $('#essentials-list');
+  if (!list) return;
+  const checked = localGet('nuestros40-checked', {});
+  const items = [...state.essentials].sort((a, b) => -byCreatedDesc(a, b));
+  list.innerHTML = items.map((item) => `
     <li>
-      <input type="checkbox" />
-      <span>${esc(item)}</span>
-      <button type="button" class="mini-delete" data-essential-index="${index}" aria-label="Eliminar item">✕</button>
+      <input type="checkbox" data-check-essential="${esc(item.id)}" ${checked[item.id] ? 'checked' : ''} />
+      <span>${esc(item.text)}</span>
+      <button type="button" class="mini-delete" data-delete-essential="${esc(item.id)}" aria-label="Eliminar item">✕</button>
     </li>
   `).join('');
 }
 
-function renderWifi() {
-  const wifiList = document.querySelector('#wifi-list');
-  if (!wifiList) return;
-
-  const items = read(STORAGE_KEYS.wifi, defaultWifi);
-  wifiList.innerHTML = items.map((entry) => `
-    <li>
-      <strong>${esc(entry.place)}</strong>
-      <span>${esc(entry.type)}</span>
-      <p>${esc(entry.info)}</p>
-    </li>
-  `).join('');
+function bindSimpleDelete(listSelector, attr, collectionName, labelFn) {
+  $(listSelector)?.addEventListener('click', async (event) => {
+    const button = event.target.closest(`[${attr}]`);
+    if (!button) return;
+    const id = button.getAttribute(attr);
+    const item = state[collectionName].find((entry) => entry.id === id);
+    if (!item || !confirm(`¿Borrar ${labelFn(item)} para todas?`)) return;
+    try { await deleteDoc(doc(db, collectionName, id)); } catch (error) { reportError(error, 'borrar'); }
+  });
 }
 
-function renderQuotes() {
-  const quoteList = document.querySelector('#quote-list');
-  if (!quoteList) return;
+function bindForms() {
+  $('#event-form')?.addEventListener('submit', handleEventSubmit);
+  $('#event-cancel')?.addEventListener('click', () => setEventFormMode(null));
+  $('#event-list')?.addEventListener('click', handleEventListClick);
 
-  const items = read(STORAGE_KEYS.quotes, defaultQuotes);
-  quoteList.innerHTML = items.map((quote) => `<li>“${esc(quote)}”</li>`).join('');
-}
-
-function renderPlaylists() {
-  const playlistList = document.querySelector('#playlist-list');
-  if (!playlistList) return;
-
-  const items = read(STORAGE_KEYS.playlist, defaultPlaylists);
-  playlistList.innerHTML = items.map((item) => `
-    <a href="${item.url}" target="_blank" rel="noopener" class="playlist-item">${item.emoji} ${esc(item.title)}</a>
-  `).join('');
-}
-
-function renderTikTok() {
-  const tiktokList = document.querySelector('#tiktok-list');
-  if (!tiktokList) return;
-
-  const items = read(STORAGE_KEYS.tiktok, defaultTikTok);
-  tiktokList.innerHTML = items.map((item) => `
-    <a href="${item.url}" target="_blank" rel="noopener" class="tiktok-item">🎵 ${esc(item.title)}</a>
-  `).join('');
-}
-
-function getSupabaseClient() {
-  const config = window.NUESTROS40_CONFIG || {};
-  const url = config.supabaseUrl || '';
-  const key = config.supabaseKey || '';
-
-  if (!url || !key || url.includes('tu-proyecto') || key.includes('tu-anon-key')) {
-    return null;
-  }
-
-  if (!window.supabase || !window.supabase.createClient) {
-    return null;
-  }
-
-  return window.supabase.createClient(url, key);
-}
-
-function getLocationsFromStorage() {
-  return read(STORAGE_KEYS.locations, []);
-}
-
-function setLocationsInStorage(locations) {
-  save(STORAGE_KEYS.locations, locations);
-}
-
-function renderMapMarkers(locations) {
-  const mapEl = document.querySelector('#location-map');
-  if (!mapEl) return;
-
-  if (!window.L) {
-    mapEl.innerHTML = '<p class="map-empty">Mapa no disponible.</p>';
-    return;
-  }
-
-  if (!window.__LOCATION_MAP__) {
-    window.__LOCATION_MAP__ = L.map('location-map').setView([18.5601, -68.3725], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(window.__LOCATION_MAP__);
-  }
-
-  const map = window.__LOCATION_MAP__;
-  map.eachLayer((layer) => {
-    if (layer instanceof L.Marker) {
-      map.removeLayer(layer);
-    }
+  $('#photo-input')?.addEventListener('change', handlePhotoInput);
+  $('#video-input')?.addEventListener('change', handleVideoInput);
+  $('#photo-gallery')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-delete-photo]');
+    if (button) deleteMedia('photos', button.dataset.deletePhoto);
+  });
+  $('#video-gallery')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-delete-video]');
+    if (button) deleteMedia('videos', button.dataset.deleteVideo);
   });
 
-  if (!locations.length) {
-    map.setView([18.5601, -68.3725], 11);
-    mapEl.dataset.empty = 'true';
-    return;
-  }
+  $('#flight-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const flight = {
+      airline: $('#flight-airline').value.trim(),
+      number: $('#flight-number').value.trim(),
+      date: $('#flight-date').value,
+      time: $('#flight-time').value,
+      origin: $('#flight-origin').value.trim(),
+      status: $('#flight-status').value || 'Confirmado'
+    };
+    if (!flight.airline || !flight.number || !flight.date || !flight.time || !flight.origin) {
+      alert('Completa todos los campos del vuelo.');
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'flights'), { ...flight, createdAt: serverTimestamp() });
+      event.target.reset();
+    } catch (error) { reportError(error); }
+  });
+  bindSimpleDelete('#flight-list', 'data-delete-flight', 'flights', (f) => `el vuelo ${f.airline} ${f.number}`);
 
-  mapEl.dataset.empty = 'false';
-  const bounds = [];
+  $('#journal-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const entry = {
+      title: $('#journal-title').value.trim(),
+      author: $('#journal-author').value.trim(),
+      text: $('#journal-text').value.trim()
+    };
+    if (!entry.title || !entry.author || !entry.text) {
+      alert('Completa todos los campos del recuerdo.');
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'journal'), { ...entry, createdAt: serverTimestamp() });
+      event.target.reset();
+    } catch (error) { reportError(error); }
+  });
+  bindSimpleDelete('#journal-list', 'data-delete-journal', 'journal', (j) => `“${j.title}”`);
 
-  locations.forEach((person) => {
-    const marker = L.marker([person.latitude, person.longitude]).addTo(map);
-    marker.bindPopup(`<strong>${esc(person.name)}</strong><br>${new Date(person.updated_at || Date.now()).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
-    bounds.push([person.latitude, person.longitude]);
+  $('#essentials-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = $('#essential-input').value.trim();
+    if (!text) {
+      alert('Escribe un item para agregarlo a la lista.');
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'essentials'), { text, createdAt: serverTimestamp() });
+      event.target.reset();
+    } catch (error) { reportError(error); }
+  });
+  bindSimpleDelete('#essentials-list', 'data-delete-essential', 'essentials', (e) => `“${e.text}”`);
+  $('#essentials-list')?.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-check-essential]');
+    if (!box) return;
+    const checked = localGet('nuestros40-checked', {});
+    if (box.checked) checked[box.dataset.checkEssential] = true; else delete checked[box.dataset.checkEssential];
+    localSet('nuestros40-checked', checked);
   });
 
-  map.fitBounds(bounds, { padding: [20, 20] });
+  $('#enable-alerts-btn')?.addEventListener('click', enableAlerts);
 }
 
-function syncLocationsFromRemote() {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    renderMapMarkers(getLocationsFromStorage());
-    return;
-  }
+/* ---------- Contenido fijo ---------- */
 
-  supabase
-    .from('group_locations')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .then(({ data, error }) => {
-      if (error) {
-        console.error(error);
-        renderMapMarkers(getLocationsFromStorage());
-        return;
-      }
+function renderStatic() {
+  $('#wifi-list').innerHTML = wifiSpots.map((entry) => `
+    <li><strong>${esc(entry.place)}</strong><span>${esc(entry.type)}</span><p>${esc(entry.info)}</p></li>
+  `).join('');
+  $('#quote-list').innerHTML = quotes.map((quote) => `<li>“${esc(quote)}”</li>`).join('');
+  $('#playlist-list').innerHTML = playlists.map((item) => `
+    <a href="${safeUrl(item.url)}" target="_blank" rel="noopener" class="playlist-item">${item.emoji} ${esc(item.title)}</a>
+  `).join('');
+  $('#tiktok-list').innerHTML = tiktoks.map((item) => `
+    <a href="${safeUrl(item.url)}" target="_blank" rel="noopener" class="tiktok-item">🎵 ${esc(item.title)}</a>
+  `).join('');
+}
 
-      const locations = (data || []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        updated_at: row.updated_at
-      }));
+/* ---------- Datos iniciales y migración ---------- */
 
-      setLocationsInStorage(locations);
-      renderMapMarkers(locations);
+// Carga la agenda y la lista de ejemplo una sola vez para todo el grupo.
+async function seedDefaultsOnce() {
+  try {
+    await runTransaction(db, async (tx) => {
+      const seedRef = doc(db, 'meta', 'seed');
+      if ((await tx.get(seedRef)).exists()) return;
+      tx.set(seedRef, { at: serverTimestamp() });
+      defaultEvents.forEach(({ id, ...item }) => tx.set(doc(db, 'events', id), { ...item, createdAt: serverTimestamp() }));
+      defaultEssentials.forEach((text, index) => tx.set(doc(db, 'essentials', `default-${index + 1}`), { text, createdAt: serverTimestamp() }));
     });
+  } catch (error) {
+    reportError(error, 'preparar la agenda');
+  }
 }
 
-function saveLocationForCurrentUser(name, latitude, longitude) {
-  const payload = {
-    name,
-    latitude,
-    longitude,
-    updated_at: new Date().toISOString()
-  };
+function hashId(prefix, value) {
+  let h = 0;
+  for (const ch of JSON.stringify(value)) h = (Math.imul(31, h) + ch.charCodeAt(0)) | 0;
+  return `${prefix}-${(h >>> 0).toString(36)}`;
+}
 
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    supabase.from('group_locations').upsert(payload, { onConflict: 'name' }).then(({ error }) => {
-      if (error) {
-        console.error(error);
-        const stored = getLocationsFromStorage();
-        const filtered = stored.filter((person) => person.name.toLowerCase() !== name.toLowerCase());
-        filtered.push(payload);
-        setLocationsInStorage(filtered);
-        renderMapMarkers(filtered);
-        return;
-      }
-      syncLocationsFromRemote();
+// Sube lo que cada celular tenía guardado solo para sí en la versión anterior.
+// Usa IDs fijos, así que si se repite no duplica nada.
+async function migrateLocalData() {
+  if (localGet('nuestros40-migrated', false)) return;
+  const raw = (key) => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
+  const writes = [];
+
+  const events = raw('nuestros40-events');
+  if (Array.isArray(events)) {
+    events.forEach((e) => {
+      if (!e?.title || !/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !/^\d{2}:\d{2}$/.test(e.time || '')) return;
+      const item = { title: e.title, date: e.date, time: e.time, location: e.location || '', detail: e.detail || '' };
+      const original = defaultEvents.find((d) => d.id === e.id);
+      if (original && ['title', 'date', 'time', 'location', 'detail'].every((k) => original[k] === item[k])) return;
+      writes.push(setDoc(doc(db, 'events', String(e.id || hashId('event', item)).replace(/\//g, '-')), { ...item, createdAt: serverTimestamp() }));
     });
-    return;
   }
 
-  const stored = getLocationsFromStorage();
-  const filtered = stored.filter((person) => person.name.toLowerCase() !== name.toLowerCase());
-  filtered.push(payload);
-  setLocationsInStorage(filtered);
-  renderMapMarkers(filtered);
-}
-
-function handleLocationSubmit(event) {
-  event.preventDefault();
-
-  const nameInput = document.querySelector('#location-name');
-  const statusBox = document.querySelector('#location-status');
-  if (!nameInput || !statusBox) return;
-
-  const name = nameInput.value.trim();
-  if (!name) {
-    alert('Escribe tu nombre para compartir tu ubicación');
-    return;
+  const flights = raw('nuestros40-flights');
+  if (Array.isArray(flights)) {
+    flights.forEach((f) => {
+      if (!f?.airline) return;
+      const item = { airline: f.airline, number: f.number || '', date: f.date || '', time: f.time || '', origin: f.origin || '', status: f.status || 'Confirmado' };
+      writes.push(setDoc(doc(db, 'flights', hashId('flight', item)), { ...item, createdAt: serverTimestamp() }));
+    });
   }
 
-  statusBox.textContent = 'Compartiendo tu ubicación...';
-
-  if (!navigator.geolocation) {
-    statusBox.textContent = 'Tu navegador no permite geolocalización.';
-    return;
+  const journal = raw('nuestros40-journal');
+  if (Array.isArray(journal)) {
+    journal.forEach((j) => {
+      if (!j?.title || !j?.text) return;
+      const item = { title: j.title, author: j.author || '', text: j.text };
+      writes.push(setDoc(doc(db, 'journal', hashId('journal', item)), { ...item, createdAt: serverTimestamp() }));
+    });
   }
 
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const { latitude, longitude } = position.coords;
-      saveLocationForCurrentUser(name, latitude, longitude);
-      statusBox.textContent = `✅ Ubicación compartida de ${name}`;
-      nameInput.value = '';
-    },
-    () => {
-      statusBox.textContent = 'No se pudo acceder a tu ubicación. Asegúrate de permitir permisos.';
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
+  const essentials = raw('nuestros40-essentials');
+  if (Array.isArray(essentials)) {
+    essentials.forEach((text) => {
+      if (typeof text !== 'string' || !text.trim() || defaultEssentials.includes(text)) return;
+      writes.push(setDoc(doc(db, 'essentials', hashId('essential', text)), { text: text.trim(), createdAt: serverTimestamp() }));
+    });
+  }
+
+  const photos = raw('nuestros40-photos');
+  if (Array.isArray(photos)) {
+    for (const photo of photos) {
+      const src = typeof photo === 'string' ? photo : photo?.src;
+      if (!src?.startsWith('data:image/')) continue;
+      writes.push((async () => {
+        const blob = await (await fetch(src)).blob();
+        const path = `photos/${hashId('migrated', src.slice(0, 2000))}.jpg`;
+        const url = await uploadFile(path, blob, blob.type || 'image/jpeg', 'fotos guardadas');
+        await setDoc(doc(db, 'photos', hashId('photo', path)), { url, path, uploadedBy: (photo?.uploadedBy || 'Una amiga').slice(0, 80), createdAt: serverTimestamp() });
+      })());
     }
-  );
-}
-
-function initEvents() {
-  const eventForm = document.querySelector('#event-form');
-  if (eventForm) {
-    eventForm.addEventListener('submit', handleEventSubmit);
   }
 
-  const eventList = document.querySelector('#event-list');
-  if (eventList) {
-    eventList.addEventListener('click', (event) => {
-      const edit = event.target.closest('[data-edit-event]');
-      const del = event.target.closest('[data-delete-event]');
-      const items = read(STORAGE_KEYS.events, defaultEvents);
-
-      if (edit) {
-        const item = items.find((entry) => entry.id === edit.dataset.editEvent);
-        if (!item) return;
-
-        const nextTitle = prompt('Título de la actividad:', item.title); if (nextTitle === null) return;
-        const nextDate = prompt('Fecha (AAAA-MM-DD):', item.date); if (nextDate === null) return;
-        const nextTime = prompt('Hora (HH:MM):', item.time); if (nextTime === null) return;
-        const nextLocation = prompt('Lugar:', item.location); if (nextLocation === null) return;
-        const nextDetail = prompt('Detalle:', item.detail); if (nextDetail === null) return;
-
-        if (!nextTitle.trim() || !nextDate || !nextTime || !nextLocation.trim() || !nextDetail.trim()) {
-          alert('Completa todos los campos.');
-          return;
-        }
-
-        Object.assign(item, {
-          title: nextTitle.trim(),
-          date: nextDate,
-          time: nextTime,
-          location: nextLocation.trim(),
-          detail: nextDetail.trim()
-        });
-
-        save(STORAGE_KEYS.events, items);
-        renderEvents();
-      }
-
-      if (del) {
-        const targetId = del.dataset.deleteEvent;
-        save(STORAGE_KEYS.events, items.filter((entry) => entry.id !== targetId));
-        renderEvents();
-      }
-    });
+  if (!writes.length) {
+    localSet('nuestros40-migrated', true);
+    return;
   }
-
-  const photoInput = document.querySelector('#photo-input');
-  if (photoInput) {
-    photoInput.addEventListener('change', async (event) => {
-      if (!event.target.files?.length) return;
-      const uploadedBy = prompt('¿Quién sube estas fotos?', 'Una amiga') || 'Una amiga';
-      const urls = await readFilesAsDataUrls(event.target.files);
-      const current = normalizePhotos(read(STORAGE_KEYS.photos, [
-        { id: 'sample-photo-1', src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' },
-        { id: 'sample-photo-2', src: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' }
-      ]));
-      save(STORAGE_KEYS.photos, urls.map((src) => ({ id: uid('photo'), src, uploadedBy: uploadedBy.trim() || 'Una amiga' })).concat(current));
-      photoInput.value = '';
-      renderPhotos();
-    });
-  }
-
-  const photoGallery = document.querySelector('#photo-gallery');
-  if (photoGallery) {
-    photoGallery.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-photo-index]');
-      if (!button) return;
-      const photos = normalizePhotos(read(STORAGE_KEYS.photos, [
-        { id: 'sample-photo-1', src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' },
-        { id: 'sample-photo-2', src: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=900&q=80', uploadedBy: 'Punta Cana 2026' }
-      ]));
-      photos.splice(Number(button.dataset.photoIndex), 1);
-      save(STORAGE_KEYS.photos, photos);
-      renderPhotos();
-    });
-  }
-
-  const videoInput = document.querySelector('#video-input');
-  if (videoInput) {
-    videoInput.addEventListener('change', (event) => {
-      const files = Array.from(event.target.files || []).filter(isValidVideo);
-      if (!files.length) {
-        videoInput.value = '';
-        return;
-      }
-
-      const current = normalizeVideos(read(STORAGE_KEYS.videos, []));
-      const newVideos = files.map((file) => ({
-        id: uid('video'),
-        name: file.name,
-        url: URL.createObjectURL(file)
-      }));
-
-      save(STORAGE_KEYS.videos, [...newVideos, ...current]);
-      videoInput.value = '';
-      renderVideos();
-    });
-  }
-
-  const theVideoGallery = document.querySelector('#video-gallery');
-  if (theVideoGallery) {
-    theVideoGallery.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-video-index]');
-      if (!button) return;
-
-      const videos = normalizeVideos(read(STORAGE_KEYS.videos, []));
-      const index = Number(button.dataset.videoIndex);
-      const targetVideo = videos[index];
-
-      if (targetVideo?.url?.startsWith('blob:')) {
-        URL.revokeObjectURL(targetVideo.url);
-      }
-
-      videos.splice(index, 1);
-      save(STORAGE_KEYS.videos, videos);
-      renderVideos();
-    });
-  }
-
-  const flightForm = document.querySelector('#flight-form');
-  if (flightForm) {
-    flightForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const flight = {
-        airline: document.querySelector('#flight-airline')?.value.trim() || '',
-        number: document.querySelector('#flight-number')?.value.trim() || '',
-        date: document.querySelector('#flight-date')?.value || '',
-        time: document.querySelector('#flight-time')?.value || '',
-        origin: document.querySelector('#flight-origin')?.value.trim() || '',
-        status: document.querySelector('#flight-status')?.value || 'Confirmado'
-      };
-
-      if (!flight.airline || !flight.number || !flight.date || !flight.time || !flight.origin) {
-        alert('Completa todos los campos del vuelo.');
-        return;
-      }
-
-      const current = read(STORAGE_KEYS.flights, []);
-      save(STORAGE_KEYS.flights, [flight, ...current]);
-      flightForm.reset();
-      renderFlights();
-    });
-  }
-
-  const flightList = document.querySelector('#flight-list');
-  if (flightList) {
-    flightList.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-flight-index]');
-      if (!button) return;
-      const flights = read(STORAGE_KEYS.flights, []);
-      flights.splice(Number(button.dataset.flightIndex), 1);
-      save(STORAGE_KEYS.flights, flights);
-      renderFlights();
-    });
-  }
-
-  const journalForm = document.querySelector('#journal-form');
-  if (journalForm) {
-    journalForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const entry = {
-        title: document.querySelector('#journal-title')?.value.trim() || '',
-        author: document.querySelector('#journal-author')?.value.trim() || '',
-        text: document.querySelector('#journal-text')?.value.trim() || ''
-      };
-
-      if (!entry.title || !entry.author || !entry.text) {
-        alert('Completa todos los campos del recuerdo.');
-        return;
-      }
-
-      const current = read(STORAGE_KEYS.journal, []);
-      save(STORAGE_KEYS.journal, [entry, ...current]);
-      journalForm.reset();
-      renderJournal();
-    });
-  }
-
-  const journalList = document.querySelector('#journal-list');
-  if (journalList) {
-    journalList.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-journal-index]');
-      if (!button) return;
-      const entries = read(STORAGE_KEYS.journal, []);
-      entries.splice(Number(button.dataset.journalIndex), 1);
-      save(STORAGE_KEYS.journal, entries);
-      renderJournal();
-    });
-  }
-
-  const essentialsForm = document.querySelector('#essentials-form');
-  if (essentialsForm) {
-    essentialsForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const value = document.querySelector('#essential-input')?.value.trim() || '';
-      if (!value) {
-        alert('Escribe un item para agregarlo a la lista.');
-        return;
-      }
-      const current = read(STORAGE_KEYS.essentials, defaultEssentials);
-      save(STORAGE_KEYS.essentials, [value, ...current]);
-      essentialsForm.reset();
-      renderEssentials();
-    });
-  }
-
-  const essentialsList = document.querySelector('#essentials-list');
-  if (essentialsList) {
-    essentialsList.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-essential-index]');
-      if (!button) return;
-      const items = read(STORAGE_KEYS.essentials, defaultEssentials);
-      items.splice(Number(button.dataset.essentialIndex), 1);
-      save(STORAGE_KEYS.essentials, items);
-      renderEssentials();
-    });
-  }
-
-  const enableAlertsBtn = document.querySelector('#enable-alerts-btn');
-  if (enableAlertsBtn) {
-    enableAlertsBtn.addEventListener('click', enableAlerts);
-  }
-
-  const locationForm = document.querySelector('#location-form');
-  if (locationForm) {
-    locationForm.addEventListener('submit', handleLocationSubmit);
+  const results = await Promise.allSettled(writes);
+  showStatus('');
+  if (results.every((r) => r.status === 'fulfilled')) {
+    localSet('nuestros40-migrated', true);
+  } else {
+    console.error(results.filter((r) => r.status === 'rejected'));
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  requestNotificationPermission();
-  initEvents();
+/* ---------- Inicio ---------- */
 
-  renderEvents();
-  renderPhotos();
-  renderVideos();
-  renderFlights();
-  renderJournal();
-  renderEssentials();
-  renderWifi();
-  renderQuotes();
-  renderPlaylists();
-  renderTikTok();
-  syncLocationsFromRemote();
-});
+bindForms();
+renderStatic();
+listen('events', renderEvents);
+listen('photos', renderPhotos);
+listen('videos', renderVideos);
+listen('flights', renderFlights);
+listen('journal', renderJournal);
+listen('essentials', renderEssentials);
+seedDefaultsOnce().then(migrateLocalData);

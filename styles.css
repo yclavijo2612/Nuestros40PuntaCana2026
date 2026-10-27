@@ -566,3 +566,42 @@ select { cursor: pointer; }
     width: 100%;
   }
 }
+
+/* Estado de sincronización y subidas */
+.sync-status {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  background: var(--deep-strong);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.sync-status.error {
+  background: #b0413e;
+}
+
+.sync-status[hidden], #event-cancel[hidden] {
+  display: none;
+}
+
+.full-btn {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.video-card figcaption {
+  padding: 0.75rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}

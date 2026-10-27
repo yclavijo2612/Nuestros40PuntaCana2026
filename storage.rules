@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Reglas de Storage para Nuestros40PuntaCana2026.
+// Pegar en: Firebase Console → Storage → Reglas → Publicar.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /photos/{file} {
+      allow read, delete: if true;
+      allow create: if request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+    match /videos/{file} {
+      allow read, delete: if true;
+      allow create: if request.resource.size < 150 * 1024 * 1024
+        && request.resource.contentType.matches('video/.*');
+    }
+  }
+}

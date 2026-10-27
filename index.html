@@ -43,7 +43,7 @@
           <h3>07/11 - 14/11</h3>
           <p>Actividades, fiestas, relajación, fotos y momentos inolvidables.</p>
           <ul class="mini-list">
-            <li>Alarma automática antes de cada actividad</li>
+            <li>Agenda compartida con alarma en el calendario</li>
             <li>Playlist de la playa</li>
             <li>Videos y fotos del viaje</li>
             <li>Lista útil para empacar</li>
@@ -52,12 +52,14 @@
       </div>
     </header>
 
+    <p id="sync-status" class="sync-status" role="status" hidden></p>
+
     <main>
       <section id="agenda" class="section">
         <div class="section-header">
           <p class="eyebrow small">Agenda</p>
           <h2>⏰ Actividades del viaje</h2>
-          <p>Organiza el plan del viaje y recibe una alarma 30 minutos antes de cada actividad.</p>
+          <p>La agenda es compartida: lo que una agrega o cambia lo ven todas. Toca “Agregar al calendario” para tener la alarma 30 minutos antes.</p>
         </div>
 
         <form id="event-form" class="event-form">
@@ -87,7 +89,8 @@
           </div>
 
           <div class="input-group full full-btn">
-            <button class="primary-btn" type="submit">Agregar actividad</button>
+            <button class="primary-btn" type="submit" id="event-submit">Agregar actividad</button>
+            <button class="primary-btn secondary" type="button" id="event-cancel" hidden>Cancelar edición</button>
           </div>
         </form>
 
@@ -289,6 +292,6 @@
 
     <footer class="footer">Con amor para nuestras 40. Punta Cana 2026 💖</footer>
 
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
   </body>
 </html>
