@@ -48,16 +48,26 @@ service cloud.firestore {
         && text('text', 150) && data().text.size() > 0 && stamped();
     }
 
+    // Fotos: miniatura en photos y foto grande en photoFull (mismo ID).
     match /photos/{id} {
       allow read, delete: if signedIn();
-      allow create: if signedIn() && data().keys().hasOnly(['url', 'path', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
-        && text('url', 2000) && text('path', 300) && text('uploadedBy', 80) && stamped();
+      allow create: if signedIn() && data().keys().hasOnly(['thumb', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
+        && text('thumb', 100000) && data().thumb[0:23] == 'data:image/jpeg;base64,'
+        && text('uploadedBy', 80) && stamped();
     }
 
+    match /photoFull/{id} {
+      allow read, delete: if signedIn();
+      allow create: if signedIn() && data().keys().hasOnly(['src', 'createdAt', 'createdBy', 'createdByName'])
+        && text('src', 950000) && data().src[0:23] == 'data:image/jpeg;base64,' && stamped();
+    }
+
+    // Videos: solo el link (los archivos quedan en Google Fotos, Drive, YouTube, etc.).
     match /videos/{id} {
       allow read, delete: if signedIn();
-      allow create: if signedIn() && data().keys().hasOnly(['url', 'path', 'name', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
-        && text('url', 2000) && text('path', 300) && text('name', 200) && text('uploadedBy', 80) && stamped();
+      allow create: if signedIn() && data().keys().hasOnly(['url', 'title', 'uploadedBy', 'createdAt', 'createdBy', 'createdByName'])
+        && text('url', 2000) && data().url.matches('^https://.*') && text('title', 120)
+        && text('uploadedBy', 80) && stamped();
     }
 
     // Perfil de cada amiga: solo se crea con el código correcto.

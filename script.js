@@ -2,7 +2,6 @@ import {
   initializeApp, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, runTransaction,
   serverTimestamp, query, orderBy,
-  getStorage, storageRef, uploadBytesResumable, getDownloadURL, deleteObject,
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, deleteUser, getDoc
 } from './vendor/firebase.js';
 import { firebaseConfig } from './firebase-config.js';
@@ -17,7 +16,6 @@ try {
 } catch {
   db = initializeFirestore(app, {});
 }
-const storage = getStorage(app);
 const auth = getAuth(app);
 
 /* ---------- Datos fijos ---------- */
@@ -123,7 +121,7 @@ function showStatus(message, isError = false) {
 
 function reportError(error, action = 'guardar') {
   console.error(error);
-  if (error?.code === 'permission-denied' || error?.code === 'storage/unauthorized') {
+  if (error?.code === 'permission-denied') {
     showStatus('⚠️ La base de datos todavía no tiene permisos configurados. Avísale a quien administra el sitio.', true);
   } else {
     alert(`No se pudo ${action}. Revisa tu conexión e inténtalo de nuevo.`);
@@ -268,56 +266,107 @@ function downloadCalendarEvent(item) {
 
 /* ---------- Fotos y videos ---------- */
 
+// Las fotos se guardan dentro de Firestore (plan gratis, sin Storage):
+// una miniatura en "photos" para la galería y la foto grande en "photoFull" (mismo ID),
+// que solo se descarga cuando alguien la abre.
+function isDataImage(src) {
+  return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(src || '');
+}
+
 function renderPhotos() {
   const gallery = $('#photo-gallery');
   if (!gallery) return;
-  gallery.innerHTML = state.photos.map((photo) => `
+  gallery.innerHTML = state.photos.filter((photo) => isDataImage(photo.thumb)).map((photo) => `
     <figure class="photo-card">
-      <img src="${safeUrl(photo.url)}" alt="Foto de ${esc(photo.uploadedBy)}" loading="lazy">
+      <img src="${photo.thumb}" alt="Foto de ${esc(photo.uploadedBy)}" loading="lazy" data-open-photo="${esc(photo.id)}">
       <figcaption>📸 ${esc(photo.uploadedBy)}</figcaption>
       <button type="button" class="btn-delete-photo" data-delete-photo="${esc(photo.id)}" title="Borrar foto">✕</button>
-      <a class="download-btn" href="${safeUrl(photo.url)}" target="_blank" rel="noopener" title="Abrir para guardar">⬇️</a>
+      <button type="button" class="download-btn" data-open-photo="${esc(photo.id)}" title="Ver en grande y guardar">⬇️</button>
     </figure>
   `).join('') || '<p>No hay fotos aún. ¡Sube la primera!</p>';
+}
+
+function videoEmbed(url) {
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/i);
+  if (yt) return `<iframe src="https://www.youtube-nocookie.com/embed/${yt[1]}" title="Video" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
+  if (/\.(mp4|webm|mov)(\?|$)/i.test(url)) return `<video src="${esc(url)}" controls playsinline preload="metadata"></video>`;
+  return '';
 }
 
 function renderVideos() {
   const gallery = $('#video-gallery');
   if (!gallery) return;
-  gallery.innerHTML = state.videos.map((video) => `
-    <figure class="video-card">
-      <video src="${safeUrl(video.url)}" controls playsinline preload="metadata"></video>
-      <figcaption>🎥 ${esc(video.uploadedBy)}</figcaption>
-      <button type="button" class="btn-delete-video" data-delete-video="${esc(video.id)}" title="Borrar video">✕</button>
-      <a class="download-btn" href="${safeUrl(video.url)}" target="_blank" rel="noopener" title="Abrir para guardar">⬇️</a>
-    </figure>
-  `).join('') || '<p>No hay videos aún. Súbelos desde la galería del celular.</p>';
+  gallery.innerHTML = state.videos.filter((video) => /^https:\/\//i.test(video.url || '')).map((video) => {
+    const embed = videoEmbed(video.url);
+    return `
+    <figure class="video-card ${embed ? '' : 'video-link-card'}">
+      ${embed || '<div class="video-placeholder">🎬</div>'}
+      <figcaption>
+        <strong>${esc(video.title || 'Video del viaje')}</strong>
+        <span>🎥 ${esc(video.uploadedBy)}</span>
+        <a class="btn-small" href="${esc(video.url)}" target="_blank" rel="noopener">▶️ Abrir video</a>
+      </figcaption>
+      <button type="button" class="btn-delete-video" data-delete-video="${esc(video.id)}" title="Quitar video">✕</button>
+    </figure>`;
+  }).join('') || '<p>No hay videos aún. Pega el link de un video para compartirlo.</p>';
 }
 
-// Achica las fotos antes de subirlas: cargan más rápido y ocupan mucho menos.
-async function compressImage(file) {
+async function loadBitmap(source) {
+  if (typeof source === 'string') {
+    const img = new Image();
+    img.src = source;
+    await img.decode();
+    return img;
+  }
   try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-    return blob && blob.size < file.size ? blob : file;
+    return await createImageBitmap(source, { imageOrientation: 'from-image' });
   } catch {
-    return file;
+    const url = URL.createObjectURL(source);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return img;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 }
 
-function uploadFile(path, blob, contentType, label) {
-  return new Promise((resolve, reject) => {
-    const task = uploadBytesResumable(storageRef(storage, path), blob, { contentType });
-    task.on('state_changed',
-      (snap) => showStatus(`⏳ Subiendo ${label}… ${Math.round((snap.bytesTransferred / snap.totalBytes) * 100)}%`),
-      reject,
-      async () => resolve(await getDownloadURL(task.snapshot.ref)));
-  });
+// Convierte la foto a JPEG achicando tamaño y calidad hasta que entre en el límite.
+function toJpeg(bitmap, maxSide, maxChars) {
+  const width = bitmap.width || bitmap.naturalWidth;
+  const height = bitmap.height || bitmap.naturalHeight;
+  let side = maxSide;
+  let quality = 0.82;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const scale = Math.min(1, side / Math.max(width, height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+    if (dataUrl.length <= maxChars) return dataUrl;
+    if (quality > 0.55) quality -= 0.1; else side = Math.round(side * 0.8);
+  }
+  throw new Error('No se pudo achicar la foto');
+}
+
+async function photoVersions(source) {
+  const bitmap = await loadBitmap(source);
+  return {
+    thumb: toJpeg(bitmap, 480, 90000),
+    full: toJpeg(bitmap, 1600, 900000)
+  };
+}
+
+async function savePhoto(id, versions, uploadedBy) {
+  await setDoc(doc(db, 'photoFull', id), { src: versions.full, ...stamp() });
+  await setDoc(doc(db, 'photos', id), { thumb: versions.thumb, uploadedBy, ...stamp() });
+}
+
+function newId(prefix) {
+  return `${prefix}-${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
 }
 
 function askUploader() {
@@ -329,60 +378,73 @@ async function handlePhotoInput(event) {
   event.target.value = '';
   if (!files.length) return;
   const uploadedBy = askUploader();
-  try {
-    for (const [index, file] of files.entries()) {
-      const blob = await compressImage(file);
-      const type = blob.type || file.type || 'image/jpeg';
-      const path = `photos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${type.split('/')[1] || 'jpg'}`;
-      const url = await uploadFile(path, blob, type, `foto ${index + 1} de ${files.length}`);
-      await addDoc(collection(db, 'photos'), { url, path, uploadedBy, ...stamp() });
+  let failed = 0;
+  for (const [index, file] of files.entries()) {
+    showStatus(`⏳ Subiendo foto ${index + 1} de ${files.length}…`);
+    try {
+      await savePhoto(newId('photo'), await photoVersions(file), uploadedBy);
+    } catch (error) {
+      console.error(error);
+      if (error?.code === 'permission-denied') { showStatus(''); reportError(error); return; }
+      failed += 1;
     }
-    showStatus('');
+  }
+  showStatus('');
+  if (failed) alert(`${failed} foto(s) no se pudieron subir. Prueba con otra o revisa tu conexión.`);
+}
+
+async function openPhoto(id) {
+  const photo = state.photos.find((entry) => entry.id === id);
+  if (!photo) return;
+  const viewer = $('#photo-viewer');
+  const img = $('#photo-viewer-img');
+  const save = $('#photo-viewer-save');
+  img.src = photo.thumb;
+  save.removeAttribute('href');
+  $('#photo-viewer-by').textContent = `📸 ${photo.uploadedBy || ''}`;
+  viewer.hidden = false;
+  document.body.classList.add('viewer-open');
+  try {
+    const snap = await getDoc(doc(db, 'photoFull', id));
+    const src = snap.exists() ? snap.data().src : '';
+    if (isDataImage(src) && !viewer.hidden) {
+      img.src = src;
+      save.href = src;
+      save.download = `foto-punta-cana-${id.slice(-6)}.jpg`;
+    }
   } catch (error) {
-    showStatus('');
-    reportError(error, 'subir la foto');
+    console.error(error);
   }
 }
 
-function videoType(file) {
-  if (file.type) return file.type;
-  const ext = (file.name.split('.').pop() || '').toLowerCase();
-  return { mov: 'video/quicktime', mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska' }[ext] || 'video/mp4';
+function closePhoto() {
+  $('#photo-viewer').hidden = true;
+  $('#photo-viewer-img').removeAttribute('src');
+  document.body.classList.remove('viewer-open');
 }
 
-async function handleVideoInput(event) {
-  const files = Array.from(event.target.files || []);
-  event.target.value = '';
-  const valid = files.filter((file) => {
-    if (file.size > 150 * 1024 * 1024) {
-      alert(`“${file.name}” pesa más de 150 MB. Recórtalo o súbelo más corto.`);
-      return false;
-    }
-    return true;
-  });
-  if (!valid.length) return;
-  const uploadedBy = askUploader();
+async function handleVideoSubmit(event) {
+  event.preventDefault();
+  const url = $('#video-url').value.trim();
+  const title = $('#video-title').value.trim();
+  if (!/^https:\/\/\S+$/i.test(url)) {
+    alert('Pega un link que empiece con https:// (de Google Fotos, Drive, YouTube, iCloud, etc.).');
+    return;
+  }
   try {
-    for (const [index, file] of valid.entries()) {
-      const type = videoType(file);
-      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-      const path = `videos/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.${ext}`;
-      const url = await uploadFile(path, file, type, `video ${index + 1} de ${valid.length}`);
-      await addDoc(collection(db, 'videos'), { url, path, name: file.name.slice(0, 200), uploadedBy, ...stamp() });
-    }
-    showStatus('');
+    await addDoc(collection(db, 'videos'), { url: url.slice(0, 2000), title: title.slice(0, 120), uploadedBy: askUploader(), ...stamp() });
+    event.target.reset();
   } catch (error) {
-    showStatus('');
-    reportError(error, 'subir el video');
+    reportError(error);
   }
 }
 
 async function deleteMedia(kind, id) {
   const item = state[kind].find((entry) => entry.id === id);
-  if (!item || !confirm(kind === 'photos' ? '¿Borrar esta foto para todas?' : '¿Borrar este video para todas?')) return;
+  if (!item || !confirm(kind === 'photos' ? '¿Borrar esta foto para todas?' : '¿Quitar este video para todas?')) return;
   try {
     await deleteDoc(doc(db, kind, id));
-    if (item.path) await deleteObject(storageRef(storage, item.path)).catch(() => {});
+    if (kind === 'photos') await deleteDoc(doc(db, 'photoFull', id)).catch(() => {});
   } catch (error) {
     reportError(error, 'borrar');
   }
@@ -450,11 +512,16 @@ function bindForms() {
   $('#event-list')?.addEventListener('click', handleEventListClick);
 
   $('#photo-input')?.addEventListener('change', handlePhotoInput);
-  $('#video-input')?.addEventListener('change', handleVideoInput);
+  $('#video-form')?.addEventListener('submit', handleVideoSubmit);
   $('#photo-gallery')?.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-delete-photo]');
-    if (button) deleteMedia('photos', button.dataset.deletePhoto);
+    const del = event.target.closest('[data-delete-photo]');
+    const open = event.target.closest('[data-open-photo]');
+    if (del) deleteMedia('photos', del.dataset.deletePhoto);
+    else if (open) openPhoto(open.dataset.openPhoto);
   });
+  $('#photo-viewer-close')?.addEventListener('click', closePhoto);
+  $('#photo-viewer')?.addEventListener('click', (event) => { if (event.target.id === 'photo-viewer') closePhoto(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('#photo-viewer').hidden) closePhoto(); });
   $('#video-gallery')?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-delete-video]');
     if (button) deleteMedia('videos', button.dataset.deleteVideo);
@@ -612,10 +679,8 @@ async function migrateLocalData() {
       const src = typeof photo === 'string' ? photo : photo?.src;
       if (!src?.startsWith('data:image/')) continue;
       writes.push((async () => {
-        const blob = await (await fetch(src)).blob();
-        const path = `photos/${hashId('migrated', src.slice(0, 2000))}.jpg`;
-        const url = await uploadFile(path, blob, blob.type || 'image/jpeg', 'fotos guardadas');
-        await setDoc(doc(db, 'photos', hashId('photo', path)), { url, path, uploadedBy: (photo?.uploadedBy || 'Una amiga').slice(0, 80), ...stamp() });
+        const id = hashId('photo', src.slice(0, 4000));
+        await savePhoto(id, await photoVersions(src), (photo?.uploadedBy || 'Una amiga').slice(0, 80));
       })());
     }
   }

@@ -174,10 +174,14 @@
         <div class="section-header">
           <p class="eyebrow small">Videos</p>
           <h2>🎥 Videos del viaje</h2>
-          <p>Guarden los mejores momentos en video para volver a verlos siempre.</p>
+          <p>Compartan los links de sus videos para tenerlos todos juntos.</p>
         </div>
-        <label for="video-input" class="upload-btn">Subir videos</label>
-        <input id="video-input" type="file" accept="video/*" multiple />
+        <form id="video-form" class="mini-form video-form">
+          <input id="video-url" type="url" inputmode="url" placeholder="Pega el link del video (Google Fotos, Drive, YouTube…)" required />
+          <input id="video-title" type="text" maxlength="120" placeholder="Título (opcional)" />
+          <button class="primary-btn" type="submit">Compartir video</button>
+        </form>
+        <p class="video-help">Los videos pesan mucho para guardarlos aquí. Súbelo a Google Fotos, Drive o iCloud, toca <strong>Compartir → Copiar link</strong> y pégalo arriba.</p>
         <div id="video-gallery" class="video-gallery"></div>
       </section>
 
@@ -317,6 +321,18 @@
         <div id="journal-list" class="journal-list"></div>
       </section>
     </main>
+
+    <div id="photo-viewer" class="photo-viewer" hidden>
+      <figure>
+        <img id="photo-viewer-img" alt="Foto en grande" />
+        <figcaption>
+          <span id="photo-viewer-by"></span>
+          <a id="photo-viewer-save" class="primary-btn">⬇️ Guardar foto</a>
+          <button id="photo-viewer-close" type="button" class="primary-btn secondary">Cerrar</button>
+        </figcaption>
+        <p class="viewer-tip">En iPhone también puedes mantener presionada la foto → “Guardar en Fotos”.</p>
+      </figure>
+    </div>
 
     <footer class="footer">Con amor para nuestras 40. Punta Cana 2026 💖</footer>
 
